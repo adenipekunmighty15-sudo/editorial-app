@@ -1,4 +1,7 @@
-const baseURL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '')
+// In production the API is served from the same origin (single-service deploy),
+// so the base URL is empty by default. During local dev, set VITE_API_URL in
+// frontend/.env to point at the backend (e.g. http://localhost:5000).
+const baseURL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
 async function request(path, options = {}) {
   const response = await fetch(`${baseURL}${path}`, {
