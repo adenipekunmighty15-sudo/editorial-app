@@ -4,6 +4,7 @@ import { Bookmark, BookOpen, ChevronRight, Flame, Heart, Home, Library, Menu, Pe
 import { gsap } from 'gsap'
 import * as THREE from 'three'
 import { api } from './api'
+import Book3D from './Book3D'
 import './styles.css'
 
 const defaultBooks = [
@@ -281,7 +282,7 @@ function App() {
           {active === 'Stories' && (
             <StoriesView stories={stories} onWrite={() => setWriterOpen(true)} />
           )}
-          {active === 'Preview' && <BookPreview books={books} />}
+          {active === 'Preview' && <BookPreview />}
         </main>
       </div>
 
@@ -897,118 +898,21 @@ function PreviewImageRail({ books = defaultBooks }) {
   )
 }
 
-function BookPreview({ books = defaultBooks }) {
-  const [opened, setOpened] = useState(false)
-  const [spread, setSpread] = useState(0)
-  const [turning, setTurning] = useState(false)
-  const pageRef = useRef(null)
-
-  const turns = [
-    { left: 'Introduction', right: 'The art of paying attention is the first step toward a lived faith. In these pages, we explore the intersection of silence and sound.' },
-    { left: 'Chapter I\nThe First Small Yes', right: 'Faith does not always arrive as a thunderclap. More often, it is a quiet invitation, a small yes spoken in the darkness of a Tuesday morning.' },
-    { left: 'The Quiet Life', right: 'To live a quiet life is not to live a boring one. It is to find the frequency of the Spirit amidst the noise of the world.' },
-    { left: 'Chapter II\nThe Road Opens', right: 'Every journey begins with a single step, but the most important steps are those taken in trust when the map is blank.' },
-    { left: 'The Practice', right: 'Presence is a muscle. We build it through the repetitive act of returning our gaze to the only One who truly sees us.' },
-    { left: 'Concluding Thoughts', right: 'May you find the courage to be still, the strength to be honest, and the grace to begin again tomorrow.' },
-  ]
-
-  const turnPage = (direction) => {
-    if (turning || (direction > 0 && spread === turns.length - 1) || (direction < 0 && spread === 0)) return
-
-    setTurning(true)
-    gsap.to(pageRef.current, {
-      rotateY: direction > 0 ? -180 : 180,
-      duration: 0.95,
-      ease: 'power2.inOut',
-      onComplete: () => {
-        setSpread((value) => value + direction)
-        gsap.set(pageRef.current, { rotateY: 0 })
-        setTurning(false)
-      },
-    })
-  }
-
-  useLayoutEffect(() => {
-    const spreadElement = pageRef.current?.parentElement
-    if (!spreadElement) return undefined
-
-    const handlePageTap = (event) => {
-      if (!opened) return
-      if (event.target.closest('.page-left')) turnPage(-1)
-      if (event.target.closest('.page-right')) turnPage(1)
-    }
-
-    spreadElement.addEventListener('click', handlePageTap)
-    return () => spreadElement.removeEventListener('click', handlePageTap)
-  }, [opened, spread, turning])
-
-  const paperNoise = 'url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27180%27 height=%27180%27 viewBox=%270 0 180 180%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.8%27 numOctaves=%274%27 stitchTiles=%27stitch%27/%3E%3CfeColorMatrix type=%27saturate%27 values=%270%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%270.16%27/%3E%3C/svg%3E")'
-
+function BookPreview() {
   return (
     <section className="book-preview">
       <div className="preview-heading">
         <div>
           <span className="eyebrow coral">CINEMATIC READING PREVIEW</span>
           <h1>The old book, reopened.</h1>
-          <p>Read the finished story here. Make edits in Start writing.</p>
+          <p>Turn the pages of the finished edition — it reads like the real thing.</p>
         </div>
-        <span className="preview-status">{opened ? `SPREAD ${spread + 1} / ${turns.length}` : 'CLOSED EDITION'}</span>
+        <span className="preview-status">INTERACTIVE 3D EDITION</span>
       </div>
 
       <PreviewImageRail />
 
-      <div className={`leather-book ${opened ? 'is-open' : ''}`}>
-        <div className="book-clasp" />
-        <div className="book-spread">
-          <div className="page page-left" style={{ '--paper-noise': paperNoise }}>
-            <span className="page-number">{spread * 2 + 1}</span>
-            {turns[spread].left.split('\n').map((line, index) => (
-              <p key={`${line}-${index}`} className={index === 0 ? 'chapter-label' : 'chapter-line'}>{line}</p>
-            ))}
-            <span className="page-rule" />
-          </div>
-          <div className="spine" />
-          <div className="page page-right" style={{ '--paper-noise': paperNoise }}>
-            {turns[spread].right.split('\n').map((line, index) => (
-              <p key={`${line}-${index}`} className={index === 0 ? 'chapter-label' : 'chapter-line'}>{line}</p>
-            ))}
-            <span className="page-number">{spread * 2 + 2}</span>
-          </div>
-          <div ref={pageRef} className="turning-page" style={{ '--paper-noise': paperNoise }}>
-            <span className="page-number">{spread * 2 + 2}</span>
-          </div>
-        </div>
-
-        <button className="cover-layer" onClick={() => setOpened(true)} aria-label="Open the book">
-          <span className="cover-ornament">R</span>
-          <span className="cover-kicker">ROOTED LIBRARY</span>
-          <strong>
-            The Practice
-            <br />
-            of Presence
-          </strong>
-          <span className="cover-author">A reading edition</span>
-          <span className="cover-open">
-            Open the book <ChevronRight size={15} />
-          </span>
-        </button>
-      </div>
-
-      {opened && (
-        <div className="preview-controls">
-          <button className="page-button" onClick={() => turnPage(-1)} disabled={spread === 0 || turning}>
-            Previous page
-          </button>
-          <span>Read-only preview</span>
-          <button
-            className="page-button primary"
-            onClick={() => turnPage(1)}
-            disabled={spread === turns.length - 1 || turning}
-          >
-            Turn page <ChevronRight size={15} />
-          </button>
-        </div>
-      )}
+      <Book3D />
     </section>
   )
 }
