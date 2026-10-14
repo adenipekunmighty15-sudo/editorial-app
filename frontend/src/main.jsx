@@ -1,29 +1,36 @@
-import { StrictMode, useLayoutEffect, useRef, useState } from 'react'
+import { StrictMode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Bookmark, BookOpen, ChevronRight, Flame, Heart, Home, Library, Menu, PenLine, Plus, Search, Send, Sparkles, Users, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import * as THREE from 'three'
+import { api } from './api'
 import './styles.css'
 
-const books = [
+const defaultBooks = [
   { title: 'The Practice of Presence', author: 'John Mark Comer', tag: 'SPIRITUAL FORMATION', image: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=500&q=80', progress: 68, color: 'terracotta' },
   { title: 'The Ruthless Elimination of Hurry', author: 'John Mark Comer', tag: 'FORMATION', image: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80', progress: 32, color: 'sage' },
   { title: 'Every Good Endeavor', author: 'Timothy Keller', tag: 'WORK & CALLING', image: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=500&q=80', progress: 12, color: 'plum' },
 ]
 
-const clubs = [
+const defaultClubs = [
   { title: 'Faith & Fiction', book: 'The Midnight Library', members: '4 / 5', time: 'starts in 2 days', image: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=400&q=80' },
   { title: 'The Quiet Life', book: 'The Ruthless Elimination of Hurry', members: '5 / 5', time: 'reading now', image: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=400&q=80' },
 ]
 
+const defaultStories = [
+  { title: 'On prayer when words fail', author: 'Dami Adeyemi', readTime: 4, likes: 12, excerpt: 'Some prayers are only silence.' },
+  { title: 'A field guide to holy friendship', author: 'Paps O.', readTime: 5, likes: 8, excerpt: 'Friendship as a spiritual discipline.' },
+  { title: 'The table is bigger than we thought', author: 'Ifeoluwa A.', readTime: 6, likes: 21, excerpt: 'On hospitality and belonging.' },
+]
+
 const verses = [
-  { text: 'ΓÇ£Be still, and know.ΓÇ¥', ref: 'Psalm 46:10' },
-  { text: 'ΓÇ£Love the Lord your God with all your heart.ΓÇ¥', ref: 'Matthew 22:37' },
-  { text: 'ΓÇ£For I know the plans I have for you.ΓÇ¥', ref: 'Jeremiah 29:11' },
-  { text: 'ΓÇ£The Lord is my shepherd; I shall not want.ΓÇ¥', ref: 'Psalm 23:1' },
-  { text: 'ΓÇ£Walk by faith, not by sight.ΓÇ¥', ref: '2 Corinthians 5:7' },
-  { text: 'ΓÇ£Be strong and courageous.ΓÇ¥', ref: 'Joshua 1:9' },
-  { text: 'ΓÇ£Grace be with you all.ΓÇ¥', ref: 'Galatians 6:18' },
+  { text: '“Be still, and know.”', ref: 'Psalm 46:10' },
+  { text: '“Love the Lord your God with all your heart.”', ref: 'Matthew 22:37' },
+  { text: '“For I know the plans I have for you.”', ref: 'Jeremiah 29:11' },
+  { text: '“The Lord is my shepherd; I shall not want.”', ref: 'Psalm 23:1' },
+  { text: '“Walk by faith, not by sight.”', ref: '2 Corinthians 5:7' },
+  { text: '“Be strong and courageous.”', ref: 'Joshua 1:9' },
+  { text: '“Grace be with you all.”', ref: 'Galatians 6:18' },
 ]
 
 const genres = ['Spiritual formation', 'Fantasy', 'Mystery', 'Romance', 'Memoir', 'Poetry', 'Horror']
@@ -62,6 +69,32 @@ function App() {
   const [writerOpen, setWriterOpen] = useState(false)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
+  const [books, setBooks] = useState(defaultBooks)
+  const [clubs, setClubs] = useState(defaultClubs)
+  const [stories, setStories] = useState(defaultStories)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const [remoteBooks, remoteClubs, remoteStories] = await Promise.all([
+          api.getBooks(),
+          api.getClubs(),
+          api.getStories(),
+        ])
+        if (cancelled) return
+        if (remoteBooks.length) setBooks(remoteBooks)
+        if (remoteClubs.length) setClubs(remoteClubs)
+        if (remoteStories.length) setStories(remoteStories)
+      } catch {
+        // Backend unavailable — keep the bundled defaults.
+      }
+    }
+    load()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const toast = (message) => {
     setNotice(message)
@@ -149,7 +182,7 @@ function App() {
               <Plus size={17} />
               Start writing
             </button>
-            <span className="version">ROOTED / BETA ┬╖ SEPT 2026</span>
+            <span className="version">ROOTED / BETA · SEPT 2026</span>
           </div>
         </aside>
 
@@ -227,8 +260,8 @@ function App() {
 
                 <aside className="quote-card">
                   <Sparkles size={19} />
-                  <p>ΓÇ£We are what we repeatedly do. Excellence, then, is not an act, but a habit.ΓÇ¥</p>
-                  <span>ΓÇö Will Durant</span>
+                  <p>“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”</p>
+                  <span>— Will Durant</span>
                   <div className="quote-dots">
                     <i />
                     <i className="selected" />
@@ -239,19 +272,40 @@ function App() {
             </>
           )}
 
-          {active === 'Library' && <LibraryView onSave={() => toast('Saved to your library')} />}
-          {active === 'Book clubs' && <ClubsView onJoin={() => toast('Request sent to the book club')} />}
-          {active === 'Stories' && <StoriesView onWrite={() => setWriterOpen(true)} />}
-          {active === 'Preview' && <BookPreview />}
+          {active === 'Library' && (
+            <LibraryView books={books} onSave={() => toast('Saved to your library')} />
+          )}
+          {active === 'Book clubs' && (
+            <ClubsView clubs={clubs} onJoin={() => toast('Request sent to the book club')} />
+          )}
+          {active === 'Stories' && (
+            <StoriesView stories={stories} onWrite={() => setWriterOpen(true)} />
+          )}
+          {active === 'Preview' && <BookPreview books={books} />}
         </main>
       </div>
 
       {writerOpen && (
         <WriterModal
           onClose={() => setWriterOpen(false)}
-          onPublish={() => {
+          onPublish={async ({ title, body }) => {
             setWriterOpen(false)
-            toast('Your story draft has been saved')
+            const readTime = Math.max(1, Math.round(body.split(/\s+/).length / 200))
+            const story = {
+              title: title || 'Untitled story',
+              author: 'Mighty',
+              content: body,
+              excerpt: body.slice(0, 140),
+              readTime,
+            }
+            try {
+              const saved = await api.addStory(story)
+              setStories((current) => [saved, ...current])
+              toast('Your story has been published')
+            } catch {
+              setStories((current) => [{ ...story, likes: 0 }, ...current])
+              toast('Saved locally — backend unavailable')
+            }
           }}
         />
       )}
@@ -416,7 +470,7 @@ function ClubCard({ club, onJoin }) {
   )
 }
 
-function LibraryView({ onSave, onOpen }) {
+function LibraryView({ books = defaultBooks, onSave, onOpen }) {
   const [filter, setFilter] = useState('For you')
 
   const catalog = books.concat([
@@ -427,7 +481,7 @@ function LibraryView({ onSave, onOpen }) {
     filter === 'For you'
       ? catalog
       : catalog.filter((book) => {
-          const tag = book.tag.toUpperCase()
+          const tag = (book.tag || '').toUpperCase()
           if (filter === 'Fiction') return tag === 'FICTION'
           if (filter === 'Non-fiction') return tag === 'NON-FICTION'
           if (filter === 'Spiritual formation') return ['SPIRITUAL FORMATION', 'FORMATION'].includes(tag)
@@ -483,7 +537,11 @@ function LibraryView({ onSave, onOpen }) {
   )
 }
 
-function ClubsView({ onJoin }) {
+function ClubsView({ clubs = defaultClubs, onJoin }) {
+  const catalog = clubs.concat([
+    { ...clubs[0], title: 'Women of the Word', book: 'The Hiding Place' },
+  ])
+
   return (
     <div className="view">
       <div className="view-heading">
@@ -499,7 +557,7 @@ function ClubsView({ onJoin }) {
       </div>
 
       <div className="club-list wide">
-        {clubs.concat([{ ...clubs[0], title: 'Women of the Word', book: 'The Hiding Place' }]).map((club, index) => (
+        {catalog.map((club, index) => (
           <ClubCard key={`${club.title}-${index}`} club={club} onJoin={onJoin} />
         ))}
       </div>
@@ -507,7 +565,7 @@ function ClubsView({ onJoin }) {
   )
 }
 
-function StoriesView({ onWrite }) {
+function StoriesView({ stories = defaultStories, onWrite }) {
   return (
     <>
       <div className="view">
@@ -526,14 +584,14 @@ function StoriesView({ onWrite }) {
         <div className="story-feature">
           <div className="story-image" />
           <div>
-            <span className="eyebrow">FEATURED STORY ┬╖ 8 MIN READ</span>
+            <span className="eyebrow">FEATURED STORY · 8 MIN READ</span>
             <h2>The grace of beginning again</h2>
-            <p>ΓÇ£Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.ΓÇ¥</p>
+            <p>“Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.”</p>
             <div className="story-author">
               <span className="avatar small">A</span>
               <span>
                 <strong>Amara Okafor</strong>
-                <small>3 days ago ┬╖ 14 responses</small>
+                <small>3 days ago · 14 responses</small>
               </span>
             </div>
           </div>
@@ -544,12 +602,12 @@ function StoriesView({ onWrite }) {
             <span className="eyebrow">FROM THE COMMUNITY</span>
             <h2>Freshly published</h2>
           </div>
-          {['On prayer when words fail', 'A field guide to holy friendship', 'The table is bigger than we thought'].map((story, index) => (
-            <article className="story-row" key={story}>
+          {stories.map((story, index) => (
+            <article className="story-row" key={`${story.title}-${index}`}>
               <span className="story-number">0{index + 1}</span>
               <div>
-                <h3>{story}</h3>
-                <p>{['Dami Adeyemi', 'Paps O.', 'Ifeoluwa A.'][index]} ┬╖ {index + 4} min read</p>
+                <h3>{story.title}</h3>
+                <p>{story.author} · {story.readTime || index + 4} min read</p>
               </div>
               <Heart size={18} />
             </article>
@@ -618,9 +676,9 @@ function PublicationHub() {
   const [sent, setSent] = useState(false)
 
   const readerPosts = [
-    { title: 'The grace of beginning again', meta: 'Amara Okafor ┬╖ 8 min read', type: 'Essay' },
-    { title: 'A field guide to holy friendship', meta: 'Paps O. ┬╖ 5 min read', type: 'Audio' },
-    { title: 'What we carry to the table', meta: 'Dami Adeyemi ┬╖ 11 min read', type: 'Video' },
+    { title: 'The grace of beginning again', meta: 'Amara Okafor · 8 min read', type: 'Essay' },
+    { title: 'A field guide to holy friendship', meta: 'Paps O. · 5 min read', type: 'Audio' },
+    { title: 'What we carry to the table', meta: 'Dami Adeyemi · 11 min read', type: 'Video' },
   ]
 
   return (
@@ -663,11 +721,11 @@ function PublicationHub() {
 
           <div className="audio-player">
             <button className="audio-play" onClick={() => setPlaying(!playing)}>
-              {playing ? '||' : 'Γû╢'}
+              {playing ? '||' : '▶'}
             </button>
             <div>
               <strong>{playing ? 'Playing narration' : 'Listen to your reading list'}</strong>
-              <span>AI narration ┬╖ Warm voice ┬╖ 12 min</span>
+              <span>AI narration · Warm voice · 12 min</span>
             </div>
             <span className="audio-progress">{playing ? '02:18' : '00:00'} / 12:00</span>
           </div>
@@ -701,8 +759,8 @@ function PublicationHub() {
             <span className="avatar small">A</span>
             <div>
               <strong>Amara Okafor</strong>
-              <p>ΓÇ£Some seasons ask us to grow quietly. Quiet growth is still growth.ΓÇ¥</p>
-              <span>ΓÖí 24 ┬╖ Γåù 6 replies ┬╖ 2h</span>
+              <p>“Some seasons ask us to grow quietly. Quiet growth is still growth.”</p>
+              <span>♡ 24 · ↗ 6 replies · 2h</span>
             </div>
           </div>
         </div>
@@ -773,7 +831,7 @@ function GenreOrganizer() {
   )
 }
 
-function PreviewImageRail() {
+function PreviewImageRail({ books = defaultBooks }) {
   const railRef = useRef(null)
   const cardsRef = useRef([])
   const drag = useRef({ active: false, start: 0, x: 0, velocity: 0 })
@@ -839,7 +897,7 @@ function PreviewImageRail() {
   )
 }
 
-function BookPreview() {
+function BookPreview({ books = defaultBooks }) {
   const [opened, setOpened] = useState(false)
   const [spread, setSpread] = useState(0)
   const [turning, setTurning] = useState(false)
