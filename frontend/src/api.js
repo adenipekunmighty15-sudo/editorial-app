@@ -33,6 +33,15 @@ export const api = {
   addStory: (story) => request('/api/stories', { method: 'POST', body: JSON.stringify(story) }),
   likeStory: (title) => request(`/api/stories/${encodeURIComponent(title)}/like`, { method: 'POST' }),
   postNote: (note) => request('/api/notes', { method: 'POST', body: JSON.stringify({ content: note }) }),
+  // Newsletter & Subscriptions
+  subscribeToAuthor: (author) => request('/api/subscriptions', { 
+    method: 'POST', 
+    body: JSON.stringify({ author }) 
+  }),
+  getSubscriptions: () => request('/api/subscriptions'),
+  // Writer Dashboard
+  getWriterStats: () => request('/api/writer/stats'),
+  getMyStories: () => request('/api/writer/stories'),
 }
 
 export const ai = {

@@ -106,6 +106,7 @@ function App() {
     { label: 'Book clubs', icon: Users },
     { label: 'Stories', icon: PenLine },
     { label: 'Preview', icon: BookOpen },
+    { label: 'Dashboard', icon: FileText },
   ]
 
   const dailyVerse = verses[new Date().getDate() % verses.length]
@@ -387,10 +388,11 @@ function App() {
            {active === 'Book clubs' && (
              <ClubsView clubs={clubs} onJoin={handleJoinClub} />
            )}
-          {active === 'Stories' && (
-            <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
-          )}
+           {active === 'Stories' && (
+             <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
+           )}
            {active === 'Preview' && <BookPreview books={books} />}
+           {active === 'Dashboard' && <WriterDashboard />}
         </main>
       </div>
 
@@ -806,6 +808,7 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
 
 function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite }) {
   const [storyLikes, setStoryLikes] = useState({})
+  const [subscribedAuthors, setSubscribedAuthors] = useState([])
 
   const handleLike = async (title) => {
     try {
@@ -819,6 +822,16 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
       }))
     } catch (e) {
       toast('Failed to like story')
+    }
+  }
+
+  const handleSubscribe = async (author) => {
+    try {
+      await api.subscribeToAuthor(author)
+      setSubscribedAuthors(prev => [...prev, author])
+      toast(`Subscribed to ${author}!`)
+    } catch (e) {
+      toast('Failed to subscribe')
     }
   }
 
@@ -850,6 +863,13 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
                 <small>3 days ago · 14 responses</small>
               </span>
             </div>
+            <button 
+              className="primary-button" 
+              style={{ marginTop: '1rem', fontSize: '0.8rem' }} 
+              onClick={() => handleSubscribe('Amara Okafor')}
+            >
+              Subscribe to Author
+            </button>
           </div>
         </div>
  
@@ -864,6 +884,13 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
               <div>
                 <h3>{story.title}</h3>
                 <p>{story.author} · {story.readTime || index + 4} min read</p>
+                <button 
+                  className="text-button" 
+                  style={{ padding: 0, fontSize: '0.7rem', color: 'coral' }} 
+                  onClick={() => handleSubscribe(story.author)}
+                >
+                  + Subscribe to {story.author}
+                </button>
               </div>
               <button 
                 onClick={() => handleLike(story.title)} 
@@ -1070,7 +1097,74 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
                  toast('Note published to feed!')
                } catch (e) {
                  toast('Failed to post note')
-               }
+function WriterDashboard() {
+  const [stats, setStats] = useState({ views: 0, subscribers: 0, stories: 0 })
+  const [myStories, setMyStories] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [s, stories] = await Promise.all([api.getWriterStats(), api.getMyStories()])
+        setStats(s)
+        setMyStories(stories)
+      } catch (e) {
+        console.error('Failed to load dashboard')
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  if (loading) return <div className="view" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>Loading Dashboard...</div>
+
+  return (
+    <div className="view">
+      <div className="view-heading">
+        <div>
+          <span className="eyebrow coral">WRITER'S HUB</span>
+          <h1>Your publication</h1>
+          <p>Manage your stories and grow your reading community.</p>
+        </div>
+      </div>
+
+      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
+        <div className="stat-card" style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span className="eyebrow">TOTAL VIEWS</span>
+          <strong style={{ fontSize: '2rem', display: 'block' }}>{stats.views}</strong>
+        </div>
+        <div className="stat-card" style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span className="eyebrow">SUBSCRIBERS</span>
+          <strong style={{ fontSize: '2rem', display: 'block' }}>{stats.subscribers}</strong>
+        </div>
+        <div className="stat-card" style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
+          <span className="eyebrow">STORIES</span>
+          <strong style={{ fontSize: '2rem', display: 'block' }}>{stats.stories}</strong>
+        </div>
+      </div>
+
+      <div className="stories-management">
+        <div className="section-heading">
+          <h2>Your Archive</h2>
+        </div>
+        <div className="story-list">
+          {myStories.map((story, idx) => (
+            <article className="story-row" key={idx}>
+              <span className="story-number">0{idx + 1}</span>
+              <div>
+                <h3>{story.title}</h3>
+                <p>{story.readTime} min read · {story.views || 0} views</p>
+              </div>
+              <button className="text-button">Edit</button>
+            </article>
+          ))}
+          {myStories.length === 0 && <p>You haven't published any stories yet.</p>}
+        </div>
+      </div>
+    </div>
+  )
+}
              }}>
                <Send size={15} />
                Post note
