@@ -330,7 +330,7 @@ function App() {
           {active === 'Stories' && (
             <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
           )}
-          {active === 'Preview' && <BookPreview />}
+           {active === 'Preview' && <BookPreview books={books} />}
         </main>
       </div>
 
@@ -1049,17 +1049,17 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
   )
 }
 
-function PreviewImageRail({ books = defaultBooks }) {
+function PreviewImageRail({ books = defaultBooks, onSelect }) {
   const railRef = useRef(null)
   const cardsRef = useRef([])
   const drag = useRef({ active: false, start: 0, x: 0, velocity: 0 })
   const images = books.concat(books).map((book, index) => ({ ...book, id: `${book.title}-${index}` }))
-
+ 
   useLayoutEffect(() => {
     const rail = railRef.current
     const cards = cardsRef.current
     const state = drag.current
-
+ 
     const move = (event) => {
       if (!state.active) return
       const x = event.clientX ?? event.touches?.[0]?.clientX
@@ -1067,14 +1067,14 @@ function PreviewImageRail({ books = defaultBooks }) {
       state.x = x
       gsap.set(rail, { x: `+=${state.velocity}` })
     }
-
+ 
     const end = () => {
       if (!state.active) return
       state.active = false
       gsap.to(rail, { x: `+=${state.velocity * 7}`, duration: 1.3, ease: 'power3.out', overwrite: true })
       gsap.to(cards, { rotationY: 0, rotationZ: 0, duration: 0.7, stagger: 0.03, ease: 'elastic.out(1, .65)' })
     }
-
+ 
     const start = (event) => {
       state.active = true
       state.x = event.clientX ?? event.touches?.[0]?.clientX
@@ -1082,11 +1082,11 @@ function PreviewImageRail({ books = defaultBooks }) {
       gsap.killTweensOf(rail)
       gsap.to(cards, { rotationY: 8, rotationZ: 1.2, duration: 0.25, stagger: 0.02, ease: 'power2.out' })
     }
-
+ 
     rail.addEventListener('pointerdown', start)
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', end)
-
+ 
     return () => {
       rail.removeEventListener('pointerdown', start)
       window.removeEventListener('pointermove', move)
@@ -1094,7 +1094,7 @@ function PreviewImageRail({ books = defaultBooks }) {
       gsap.killTweensOf([rail, cards])
     }
   }, [])
-
+ 
   return (
     <div className="preview-rail-viewport">
       <div ref={railRef} className="preview-image-rail">
@@ -1105,6 +1105,7 @@ function PreviewImageRail({ books = defaultBooks }) {
             ref={(node) => {
               cardsRef.current[index] = node
             }}
+            onClick={() => onSelect?.(image)}
           >
             <img src={image.image} alt="" />
             <span>{image.tag}</span>
@@ -1115,21 +1116,23 @@ function PreviewImageRail({ books = defaultBooks }) {
   )
 }
 
-function BookPreview() {
+function BookPreview({ books }) {
+  const [selectedBook, setSelectedBook] = useState(books[0])
+
   return (
     <section className="book-preview">
       <div className="preview-heading">
         <div>
           <span className="eyebrow coral">CINEMATIC READING PREVIEW</span>
-          <h1>The old book, reopened.</h1>
+          <h1>{selectedBook?.title || 'The old book, reopened.'}</h1>
           <p>Turn the pages of the finished edition — it reads like the real thing.</p>
         </div>
         <span className="preview-status">INTERACTIVE 3D EDITION</span>
       </div>
-
-      <PreviewImageRail />
-
-      <Book3D />
+ 
+      <PreviewImageRail books={books} onSelect={setSelectedBook} />
+ 
+      <Book3D book={selectedBook} />
     </section>
   )
 }
