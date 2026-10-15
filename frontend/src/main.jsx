@@ -745,6 +745,23 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
 }
 
 function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite }) {
+  const [storyLikes, setStoryLikes] = useState({})
+
+  const handleLike = async (title) => {
+    try {
+      await api.likeStory(title)
+      setStoryLikes(prev => ({
+        ...prev,
+        [title]: { 
+          liked: !prev[title]?.liked, 
+          count: prev[title]?.liked ? (stories.find(s => s.title === title)?.likes - 1 || 0) : (stories.find(s => s.title === title)?.likes + 1 || 1) 
+        }
+      }))
+    } catch (e) {
+      toast('Failed to like story')
+    }
+  }
+
   return (
     <>
       <div className="view">
@@ -759,7 +776,7 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
             Start writing
           </button>
         </div>
-
+ 
         <div className="story-feature">
           <div className="story-image" />
           <div>
@@ -775,7 +792,7 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
             </div>
           </div>
         </div>
-
+ 
         <div className="story-list">
           <div>
             <span className="eyebrow">FROM THE COMMUNITY</span>
@@ -788,12 +805,18 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
                 <h3>{story.title}</h3>
                 <p>{story.author} · {story.readTime || index + 4} min read</p>
               </div>
-              <Heart size={18} />
+              <button 
+                onClick={() => handleLike(story.title)} 
+                className={`like-button ${storyLikes[story.title]?.liked ? 'active' : ''}`}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: storyLikes[story.title]?.liked ? 'red' : 'inherit' }}
+              >
+                <Heart size={18} fill={storyLikes[story.title]?.liked ? 'currentColor' : 'none'} />
+              </button>
             </article>
           ))}
         </div>
       </div>
-
+ 
       <PublicationHub books={books} clubs={clubs} stories={stories} />
       <GenreOrganizer />
     </>
@@ -970,39 +993,49 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
         </div>
       )}
 
-      {tab === 'Notes' && (
-        <div className="notes-feed">
-          <div className="feed-header">
-            <div>
-              <span className="eyebrow coral">NOTES</span>
-              <h2>Small thoughts, wide reach.</h2>
-              <p>Share a line, a question, or a discovery with your readers.</p>
-            </div>
-            <button className="primary-button note-button" onClick={() => setSent(true)}>
-              <Send size={15} />
-              Post note
-            </button>
-          </div>
-
-          <textarea
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="What are you thinking about?"
-            className="note-composer"
-          />
-
-          {sent && <div className="note-sent">Your note is now in the discovery feed.</div>}
-
-          <div className="note-card">
-            <span className="avatar small">A</span>
-            <div>
-              <strong>Amara Okafor</strong>
-              <p>“Some seasons ask us to grow quietly. Quiet growth is still growth.”</p>
-              <span>♡ 24 · ↗ 6 replies · 2h</span>
-            </div>
-          </div>
-        </div>
-      )}
+       {tab === 'Notes' && (
+         <div className="notes-feed">
+           <div className="feed-header">
+             <div>
+               <span className="eyebrow coral">NOTES</span>
+               <h2>Small thoughts, wide reach.</h2>
+               <p>Share a line, a question, or a discovery with your readers.</p>
+             </div>
+             <button className="primary-button note-button" onClick={async () => {
+               if (!note.trim()) return
+               try {
+                 await api.postNote(note)
+                 setSent(true)
+                 setNote('')
+                 toast('Note published to feed!')
+               } catch (e) {
+                 toast('Failed to post note')
+               }
+             }}>
+               <Send size={15} />
+               Post note
+             </button>
+           </div>
+ 
+           <textarea
+             value={note}
+             onChange={(event) => setNote(event.target.value)}
+             placeholder="What are you thinking about?"
+             className="note-composer"
+           />
+ 
+           {sent && <div className="note-sent">Your note is now in the discovery feed.</div>}
+ 
+           <div className="note-card">
+             <span className="avatar small">A</span>
+             <div>
+               <strong>Amara Okafor</strong>
+               <p>“Some seasons ask us to grow quietly. Quiet growth is still growth.”</p>
+               <span>♡ 24 · ↗ 6 replies · 2h</span>
+             </div>
+           </div>
+         </div>
+       )}
 
       {tab === 'Studio' && (
         <>
