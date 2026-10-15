@@ -179,7 +179,8 @@ export default function Book3D() {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
-    camera.position.set(0.35, 0.42, 3.5)
+    camera.position.set(0, 0.5, 3)
+    camera.lookAt(0, 0, 0)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -219,7 +220,7 @@ export default function Book3D() {
     controls.maxDistance = 6.5
     controls.minPolarAngle = 0.2
     controls.maxPolarAngle = Math.PI * 0.62
-    controls.target.set(0.35, 0, 0)
+    controls.target.set(0, 0, 0)
 
     const shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 4),
@@ -236,6 +237,35 @@ export default function Book3D() {
     const bookRoot = new THREE.Group()
     scene.add(bookRoot)
 
+    const raycaster = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    const onTouch = (event) => {
+      const rect = mount.getBoundingClientRect()
+      const clientX = event.touches ? event.touches[0].clientX : event.clientX
+      const clientY = event.touches ? event.touches[0].clientY : event.clientY
+      
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
+
+      raycaster.setFromCamera(mouse, camera)
+      const intersects = raycaster.intersectObjects(bookRoot.children, true)
+
+      if (intersects.length > 0) {
+        const point = intersects[0].point
+        if (point.x > 0) {
+          nextPage()
+        } else {
+          prevPage()
+        }
+      }
+    }
+
+    mount.addEventListener('mousedown', onTouch)
+    mount.addEventListener('touchstart', onTouch)
+    // ... (inside return cleanup)
+    mount.removeEventListener('mousedown', onTouch)
+    mount.removeEventListener('touchstart', onTouch)
     const resize = () => {
       const { width, height } = mount.getBoundingClientRect()
       if (!width || !height) return
@@ -244,6 +274,33 @@ export default function Book3D() {
       camera.updateProjectionMatrix()
       if (rig.requestRender) rig.requestRender()
     }
+
+    const raycaster = new THREE.Raycaster()
+    const mouse = new THREE.Vector2()
+
+    const onTouch = (event) => {
+      const rect = mount.getBoundingClientRect()
+      const clientX = event.touches ? event.touches[0].clientX : event.clientX
+      const clientY = event.touches ? event.touches[0].clientY : event.clientY
+      
+      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
+      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
+
+      raycaster.setFromCamera(mouse, camera)
+      const intersects = raycaster.intersectObjects(bookRoot.children, true)
+
+      if (intersects.length > 0) {
+        const point = intersects[0].point
+        if (point.x > 0) {
+          nextPage()
+        } else {
+          prevPage()
+        }
+      }
+    }
+
+    mount.addEventListener('mousedown', onTouch)
+    mount.addEventListener('touchstart', onTouch)
 
     let frame = 0
     let last = performance.now()
@@ -458,6 +515,8 @@ export default function Book3D() {
       controls.dispose()
       pmrem.dispose()
       envRT.dispose()
+      mount.removeEventListener('mousedown', onTouch)
+      mount.removeEventListener('touchstart', onTouch)
       scene.traverse((child) => {
         if (child.isMesh) {
           child.geometry?.dispose()
