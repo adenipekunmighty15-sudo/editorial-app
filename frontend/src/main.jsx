@@ -45,6 +45,9 @@ function App() {
   const [stories, setStories] = useState(defaultStories)
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [theme, setTheme] = useState('light')
+  const [notifications, setNotifications] = useState(true)
 
   useEffect(() => {
     let cancelled = false
@@ -158,33 +161,90 @@ function App() {
        </div>
      )}
 
-     {profileOpen && (
-       <div className="modal-backdrop" onClick={() => setProfileOpen(false)}>
-         <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
-           <div className="writer-toolbar">
-             <span className="writer-brand">USER PROFILE</span>
-             <button className="close-button" onClick={() => setProfileOpen(false)}>
-               <X size={20} />
-             </button>
-           </div>
-           <div className="profile-content">
-             <div className="profile-header">
-               <div className="avatar large">M</div>
-               <h2>Mighty</h2>
-               <p>Dedicated Reader & Writer</p>
-             </div>
-             <div className="profile-stats">
-               <div className="stat-box"><strong>12</strong><span>Day Streak</span></div>
-               <div className="stat-box"><strong>4</strong><span>Books Saved</span></div>
-               <div className="stat-box"><strong>2</strong><span>Clubs</span></div>
-             </div>
-             <button className="primary-button" style={{ width: '100%', marginTop: '2rem' }} onClick={() => setProfileOpen(false)}>
-               Close Profile
-             </button>
-           </div>
-         </div>
-       </div>
-     )}
+      {profileOpen && (
+        <div className="modal-backdrop" onClick={() => setProfileOpen(false)}>
+          <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="writer-toolbar">
+              <span className="writer-brand">USER PROFILE</span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button className="icon-button" onClick={() => { setProfileOpen(false); setSettingsOpen(true); }} title="Settings">
+                  <Search size={18} />
+                </button>
+                <button className="close-button" onClick={() => setProfileOpen(false)}>
+                  <X size={20} />
+                </button>
+              </div>
+            </div>
+            <div className="profile-content">
+              <div className="profile-header">
+                <div className="avatar large">M</div>
+                <h2>Mighty</h2>
+                <p>Dedicated Reader & Writer</p>
+              </div>
+              <div className="profile-stats">
+                <div className="stat-box"><strong>12</strong><span>Day Streak</span></div>
+                <div className="stat-box"><strong>4</strong><span>Books Saved</span></div>
+                <div className="stat-box"><strong>2</strong><span>Clubs</span></div>
+              </div>
+              <button className="primary-button" style={{ width: '100%', marginTop: '2rem' }} onClick={() => setProfileOpen(false)}>
+                Close Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {settingsOpen && (
+        <div className="modal-backdrop" onClick={() => setSettingsOpen(false)}>
+          <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="writer-toolbar">
+              <span className="writer-brand">SETTINGS</span>
+              <button className="close-button" onClick={() => setSettingsOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="profile-content">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1rem' }}>
+                <div className="setting-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <strong>Dark Mode</strong>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Reduce eye strain at night</p>
+                  </div>
+                  <button 
+                    className={`icon-button ${theme === 'dark' ? 'active' : ''}`} 
+                    onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+                  >
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: theme === 'dark' ? '#ff4d4d' : '#ccc' }} />
+                  </button>
+                </div>
+                <div className="setting-item" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div>
+                    <strong>Notifications</strong>
+                    <p style={{ fontSize: '0.8rem', opacity: 0.7 }}>Get alerted about new book clubs</p>
+                  </div>
+                  <button 
+                    className={`icon-button ${notifications ? 'active' : ''}`} 
+                    onClick={() => setNotifications(!notifications)}
+                  >
+                    <div style={{ width: 12, height: 12, borderRadius: '50%', background: notifications ? '#4CAF50' : '#ccc' }} />
+                  </button>
+                </div>
+                <div className="setting-item" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  <strong>Account Email</strong>
+                  <input 
+                    className="editor-title" 
+                    style={{ fontSize: '1rem', padding: '0.5rem' }} 
+                    defaultValue="mighty@example.com" 
+                  />
+                </div>
+                <button className="primary-button" style={{ width: '100%', marginTop: '1rem' }} onClick={() => setSettingsOpen(false)}>
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
      <div className="layout">
         <aside className="sidebar">
