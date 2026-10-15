@@ -897,7 +897,7 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
           <div className="story-image" />
           <div>
             <span className="eyebrow">FEATURED STORY · 8 MIN READ</span>
-            <h2>The grace of beginning again</h2>
+            <h2 onClick={() => onRead({ title: 'The grace of beginning again', author: 'Amara Okafor', content: '...' })} style={{ cursor: 'pointer' }}>The grace of beginning again</h2>
             <p>“Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.”</p>
             <div className="story-author">
               <span className="avatar small">A</span>
@@ -924,13 +924,13 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
           {stories.map((story, index) => (
             <article className="story-row" key={`${story.title}-${index}`}>
               <span className="story-number">0{index + 1}</span>
-              <div>
+              <div style={{ cursor: 'pointer' }} onClick={() => onRead(story)}>
                 <h3>{story.title}</h3>
                 <p>{story.author} · {story.readTime || index + 4} min read</p>
                 <button 
                   className="text-button" 
                   style={{ padding: 0, fontSize: '0.7rem', color: 'coral' }} 
-                  onClick={() => handleSubscribe(story.author)}
+                  onClick={(e) => { e.stopPropagation(); handleSubscribe(story.author); }}
                 >
                   + Subscribe to {story.author}
                 </button>
