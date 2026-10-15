@@ -1,4 +1,4 @@
-"""Generate an interactive 3D hardcover notebook and export it as GLB.
+ it to """Generate an interactive 3D hardcover notebook and export it as GLB.
 
 Run headless:
     blender --background --python tools/make_book.py -- <output.glb>

@@ -46,20 +46,20 @@
 .leather-book { isolation:isolate; }.leather-book::after { content:''; position:absolute; z-index:6; inset:0; pointer-events:none; opacity:.3; background:radial-gradient(ellipse at 12% 18%, color-mix(in oklch, oklch(88% .12 73) 30%, transparent), transparent 24%), radial-gradient(ellipse at 91% 82%, color-mix(in oklch, black 40%, transparent), transparent 27%), repeating-linear-gradient(73deg, transparent 0 31px, color-mix(in oklch, black 10%, transparent) 32px 34px, transparent 35px 71px); mix-blend-mode:multiply; }.page::after { content:''; display:block; position:absolute; inset:0; z-index:0; pointer-events:none; opacity:.22; background:radial-gradient(circle at 18% 22%, color-mix(in oklch, oklch(31% .08 42) 34%, transparent) 0 2%, transparent 3%), radial-gradient(circle at 73% 67%, color-mix(in oklch, oklch(92% .1 73) 25%, transparent) 0 5%, transparent 6%); background-size:120px 150px, 190px 170px; mix-blend-mode:multiply; }.page > * { z-index:1; }
 
 /* Interactive 3D notebook (Blender-authored, rendered with three.js) */
-.book3d { margin-top:6px; position:fixed; inset:0; z-index:100; background:oklch(13% .03 38); }
-.book3d-stage { position:relative; border-radius:0; overflow:hidden; height:100vh; width:100vw; background:radial-gradient(ellipse at 50% 16%, oklch(40% .06 45), oklch(20% .045 40) 56%, oklch(13% .03 38)); box-shadow:inset 0 0 130px color-mix(in oklch, black 55%, transparent); }
-.book3d-stage::before { content:''; position:absolute; inset:0; z-index:1; pointer-events:none; opacity:.35; background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%27160%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.9%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%270.14%27/%3E%3C/svg%3E"); mix-blend-mode:overlay; }
+.book3d { margin-top:0; position:fixed; inset:0; z-index:100; background:oklch(13% .03 38); }
+.book3d-stage { position:relative; border-radius:0; overflow:hidden; height:100vh; width:100vw; background:radial-gradient(ellipse at 50% 16%, oklch(43% .06 48), oklch(21% .05 40) 58%, oklch(12% .03 36)); box-shadow:inset 0 0 120px color-mix(in oklch, black 60%, transparent); }
+.book3d-stage::before { content:''; position:absolute; inset:0; z-index:1; pointer-events:none; opacity:.18; background-image:url("data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 width=%27160%27 height=%27160%27%3E%3Cfilter id=%27n%27%3E%3CfeTurbulence type=%27fractalNoise%27 baseFrequency=%270.9%27 numOctaves=%273%27 stitchTiles=%27stitch%27/%3E%3C/filter%3E%3Crect width=%27100%25%27 height=%27100%25%27 filter=%27url(%23n)%27 opacity=%270.14%27/%3E%3C/svg%3E"); mix-blend-mode:overlay; }
 .book3d-canvas { position:absolute; inset:0; z-index:0; }
 .book3d-canvas canvas { display:block; width:100%; height:100%; }
 .book3d-loading { position:absolute; inset:0; z-index:2; display:grid; place-items:center; color:oklch(88% .05 75); font-family:'Playfair Display'; font-style:italic; font-size:18px; }
 .book3d-loading.error { color:oklch(76% .13 30); }
-.book3d-hint { position:absolute; left:20px; bottom:18px; z-index:2; pointer-events:none; color:color-mix(in oklch, oklch(95% .04 80) 62%, transparent); font-size:10px; font-weight:600; letter-spacing:.15em; text-transform:uppercase; }
-.book3d-controls { position:absolute; bottom:40px; left:50%; transform:translateX(-50%); width:min(600px, 90%); z-index:10; background:color-mix(in oklch, white 10%, transparent); backdrop-filter:blur(12px); padding:20px; border-radius:16px; border:1px solid color-mix(in oklch, white 20%, transparent); box-shadow:0 20px 40px rgba(0,0,0,0.5); }
+.book3d-hint { position:absolute; left:24px; bottom:22px; z-index:2; pointer-events:none; color:color-mix(in oklch, oklch(95% .04 80) 72%, transparent); font-size:10px; font-weight:600; letter-spacing:.15em; text-transform:uppercase; }
+.book3d-controls { position:absolute; bottom:26px; left:50%; transform:translateX(-50%); width:min(760px, calc(100% - 30px)); z-index:10; background:rgba(12, 11, 10, 0.48); backdrop-filter:blur(14px); padding:16px 18px 18px; border-radius:18px; border:1px solid rgba(255,255,255,0.12); box-shadow:0 20px 50px rgba(0,0,0,0.42); }
 .book3d-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
 .book3d-row .primary-button, .book3d-row .page-button { width:auto; }
 .book3d-meta { justify-content:space-between; }
-.book3d-page-label { font-family:'Playfair Display'; font-style:italic; color:oklch(45% .04 45); font-size:14px; }
-.bookmark-button { padding:9px 13px; background:oklch(90% .045 55); color:oklch(44% .13 40); font-size:11px; font-weight:600; border:1px solid oklch(82% .05 55); }
+.book3d-page-label { font-family:'Playfair Display'; font-style:italic; color:oklch(90% .03 78); font-size:14px; }
+.bookmark-button { padding:9px 13px; background:rgba(232, 201, 149, 0.18); color:oklch(95% .04 80); font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,0.14); }
 .bookmark-button.active { background:oklch(57% .16 35); color:white; border-color:transparent; }
 .bookmark-button:disabled { opacity:.5; cursor:not-allowed; }
 .book3d-slider { -webkit-appearance:none; appearance:none; width:100%; height:4px; border-radius:4px; background:oklch(86% .025 80); outline:none; }

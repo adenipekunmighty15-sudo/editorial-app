@@ -1,9 +1,10 @@
 import { StrictMode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Bookmark, BookOpen, ChevronRight, Flame, Heart, Home, Library, Menu, PenLine, Plus, Search, Send, Sparkles, Users, X } from 'lucide-react'
+import { Bookmark, BookOpen, Check, ChevronRight, FileText, Flame, Heart, Home, Library, Menu, PenLine, Plus, Search, Send, Sparkles, Users, WandSparkles, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import * as THREE from 'three'
-import { api } from './api'
+import { ai, api } from './api'
+import { AIRecommendations, ClubGuide, GenreOrganizer, RootedChat } from './AIWidgets'
 import Book3D from './Book3D'
 import './styles.css'
 
@@ -34,37 +35,6 @@ const verses = [
   { text: '“Grace be with you all.”', ref: 'Galatians 6:18' },
 ]
 
-const genres = ['Spiritual formation', 'Fantasy', 'Mystery', 'Romance', 'Memoir', 'Poetry', 'Horror']
-
-const genreSignals = {
-  Romance: ['love', 'heart', 'kiss', 'wedding', 'beloved'],
-  Mystery: ['clue', 'secret', 'murder', 'detective', 'truth'],
-  Thriller: ['danger', 'escape', 'threat', 'chase', 'fear'],
-  Fantasy: ['magic', 'kingdom', 'dragon', 'spell', 'enchanted'],
-  'Science fiction': ['planet', 'robot', 'space', 'future', 'orbit'],
-  Memoir: ['remember', 'childhood', 'my mother', 'my father', 'years ago'],
-  Poetry: ['river', 'moon', 'silence', 'wild', 'dream'],
-  'Spiritual formation': ['prayer', 'grace', 'faith', 'God', 'soul'],
-  Biography: ['born', 'career', 'worked', 'life of', 'legacy'],
-  Horror: ['ghost', 'darkness', 'blood', 'haunted', 'scream'],
-}
-
-function organizeByGenre(text) {
-  return text
-    .split(/\n+/)
-    .map((section, index) => {
-      const normalized = section.toLowerCase()
-      const match = Object.entries(genreSignals).find(([, words]) =>
-        words.some((word) => normalized.includes(word.toLowerCase())),
-      )
-      return {
-        section: section.trim() || `Section ${index + 1}`,
-        genre: match?.[0] || 'Literary fiction',
-      }
-    })
-    .filter(({ section }) => section)
-}
-
 function App() {
   const [active, setActive] = useState('Home')
   const [writerOpen, setWriterOpen] = useState(false)
@@ -73,6 +43,8 @@ function App() {
   const [books, setBooks] = useState(defaultBooks)
   const [clubs, setClubs] = useState(defaultClubs)
   const [stories, setStories] = useState(defaultStories)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [profileOpen, setProfileOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -136,14 +108,62 @@ function App() {
               placeholder="Search books, stories, people"
             />
           </label>
-          <button className="icon-button mobile-menu" aria-label="Menu">
-            <Menu size={20} />
-          </button>
-          <button className="avatar" aria-label="Open profile">M</button>
-        </div>
-      </header>
+           <button className="icon-button mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>
+             <Menu size={20} />
+           </button>
+           <button className="avatar" aria-label="Open profile" onClick={() => setProfileOpen(true)}>M</button>
+       </div>
+     </header>
 
-      <div className="layout">
+     {menuOpen && (
+       <div className="mobile-nav-overlay" onClick={() => setMenuOpen(false)}>
+         <nav className="mobile-nav" onClick={(e) => e.stopPropagation()}>
+           {navItems.map(({ label, icon: Icon }) => (
+             <button
+               key={label}
+               className={active === label ? 'nav-item active' : 'nav-item'}
+               onClick={() => {
+                 setActive(label)
+                 setMenuOpen(false)
+               }}
+             >
+               <Icon size={18} />
+               {label}
+             </button>
+           ))}
+         </nav>
+       </div>
+     )}
+
+     {profileOpen && (
+       <div className="modal-backdrop" onClick={() => setProfileOpen(false)}>
+         <div className="profile-modal" onClick={(e) => e.stopPropagation()}>
+           <div className="writer-toolbar">
+             <span className="writer-brand">USER PROFILE</span>
+             <button className="close-button" onClick={() => setProfileOpen(false)}>
+               <X size={20} />
+             </button>
+           </div>
+           <div className="profile-content">
+             <div className="profile-header">
+               <div className="avatar large">M</div>
+               <h2>Mighty</h2>
+               <p>Dedicated Reader & Writer</p>
+             </div>
+             <div className="profile-stats">
+               <div className="stat-box"><strong>12</strong><span>Day Streak</span></div>
+               <div className="stat-box"><strong>4</strong><span>Books Saved</span></div>
+               <div className="stat-box"><strong>2</strong><span>Clubs</span></div>
+             </div>
+             <button className="primary-button" style={{ width: '100%', marginTop: '2rem' }} onClick={() => setProfileOpen(false)}>
+               Close Profile
+             </button>
+           </div>
+         </div>
+       </div>
+     )}
+
+     <div className="layout">
         <aside className="sidebar">
           <div className="welcome">
             <span className="eyebrow">GOOD MORNING, MIGHTY</span>
@@ -280,7 +300,7 @@ function App() {
             <ClubsView clubs={clubs} onJoin={() => toast('Request sent to the book club')} />
           )}
           {active === 'Stories' && (
-            <StoriesView stories={stories} onWrite={() => setWriterOpen(true)} />
+            <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
           )}
           {active === 'Preview' && <BookPreview />}
         </main>
@@ -289,6 +309,7 @@ function App() {
       {writerOpen && (
         <WriterModal
           onClose={() => setWriterOpen(false)}
+          onAssist={(input) => ai.write(input)}
           onPublish={async ({ title, body }) => {
             setWriterOpen(false)
             const readTime = Math.max(1, Math.round(body.split(/\s+/).length / 200))
@@ -533,6 +554,8 @@ function LibraryView({ books = defaultBooks, onSave, onOpen }) {
         ))}
       </div>
 
+      <AIRecommendations books={books} />
+
       {filtered.length === 0 && <div className="empty-library">No books in this shelf yet. Try another genre.</div>}
     </div>
   )
@@ -562,11 +585,13 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
           <ClubCard key={`${club.title}-${index}`} club={club} onJoin={onJoin} />
         ))}
       </div>
+
+      <ClubGuide clubs={catalog} />
     </div>
   )
 }
 
-function StoriesView({ stories = defaultStories, onWrite }) {
+function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite }) {
   return (
     <>
       <div className="view">
@@ -616,21 +641,52 @@ function StoriesView({ stories = defaultStories, onWrite }) {
         </div>
       </div>
 
-      <PublicationHub />
+      <PublicationHub books={books} clubs={clubs} stories={stories} />
       <GenreOrganizer />
     </>
   )
 }
 
-function WriterModal({ onClose, onPublish }) {
+function WriterModal({ onClose, onPublish, onAssist }) {
   const [title, setTitle] = useState('')
   const [body, setBody] = useState('')
   const [isSaving, setIsSaving] = useState(false)
+  const [aiAction, setAiAction] = useState('')
+  const [suggestion, setSuggestion] = useState(null)
+  const [aiError, setAiError] = useState('')
 
   const handleTextChange = (updater) => {
     updater()
     setIsSaving(true)
     window.setTimeout(() => setIsSaving(false), 1000)
+  }
+
+  const requestAssistance = async (action) => {
+    if (!body.trim()) {
+      setAiError('Write a little first, then ask for a suggestion.')
+      return
+    }
+    setAiAction(action)
+    setAiError('')
+    setSuggestion(null)
+    try {
+      const result = await onAssist({ action, title, text: body })
+      setSuggestion({ action, text: result.text })
+    } catch (error) {
+      setAiError(error.message)
+    } finally {
+      setAiAction('')
+    }
+  }
+
+  const applySuggestion = () => {
+    if (!suggestion) return
+    const updatedBody = suggestion.action === 'continue'
+      ? `${body.trimEnd()}\n\n${suggestion.text}`
+      : suggestion.text
+    setBody(updatedBody)
+    setSuggestion(null)
+    setAiError('')
   }
 
   return (
@@ -646,6 +702,21 @@ function WriterModal({ onClose, onPublish }) {
             <Send size={16} />
             Publish draft
           </button>
+        </div>
+
+        <div className="writer-ai-toolbar" aria-label="AI writing actions">
+          <span><Sparkles size={15} /> Writing partner</span>
+          <button onClick={() => requestAssistance('continue')} disabled={Boolean(aiAction)} title="Continue this draft">
+            <WandSparkles size={15} /> Continue
+          </button>
+          <button onClick={() => requestAssistance('revise')} disabled={Boolean(aiAction)} title="Revise this draft">
+            <Check size={15} /> Revise
+          </button>
+          <button onClick={() => requestAssistance('summarize')} disabled={Boolean(aiAction)} title="Summarize this draft">
+            <FileText size={15} /> Summarize
+          </button>
+          {aiAction && <span className="writer-ai-state" role="status">Working with your local model...</span>}
+          {aiError && <span className="writer-ai-error" role="alert">{aiError}</span>}
         </div>
 
         <main className="full-page-editor">
@@ -664,13 +735,26 @@ function WriterModal({ onClose, onPublish }) {
             onChange={(event) => handleTextChange(() => setBody(event.target.value))}
             rows="18"
           />
+          {suggestion && (
+            <section className="writer-suggestion" aria-live="polite">
+              <div className="writer-suggestion-heading">
+                <strong>{suggestion.action === 'continue' ? 'Suggested continuation' : suggestion.action === 'revise' ? 'Suggested revision' : 'Draft summary'}</strong>
+                <div>
+                  {suggestion.action !== 'summarize' && <button onClick={applySuggestion}><Check size={15} /> Apply</button>}
+                  <button onClick={() => setSuggestion(null)} aria-label="Dismiss suggestion"><X size={16} /></button>
+                </div>
+              </div>
+              <p>{suggestion.text}</p>
+              {suggestion.action === 'summarize' && <span>Summary only. Your draft has not been changed.</span>}
+            </section>
+          )}
         </main>
       </div>
     </div>
   )
 }
 
-function PublicationHub() {
+function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs = defaultClubs }) {
   const [tab, setTab] = useState('Reader')
   const [playing, setPlaying] = useState(false)
   const [note, setNote] = useState('')
@@ -766,68 +850,15 @@ function PublicationHub() {
           </div>
         </div>
       )}
-    </section>
-  )
-}
 
-function GenreOrganizer() {
-  const [story, setStory] = useState('')
-  const [sections, setSections] = useState([])
+      {tab === 'Studio' && (
+        <>
+          <AIRecommendations books={books} />
+          <ClubGuide clubs={clubs} />
+        </>
+      )}
 
-  const analyze = () => setSections(organizeByGenre(story))
-
-  return (
-    <section className="genre-organizer">
-      <div className="organizer-heading">
-        <div>
-          <span className="eyebrow coral">WRITER'S ASSISTANT</span>
-          <h2>Let the story find its shelf.</h2>
-          <p>Paste a draft and Rooted will suggest a genre for each section.</p>
-        </div>
-        <span className="ai-badge">
-          <Sparkles size={14} />
-          AUTONOMOUS AI
-        </span>
-      </div>
-
-      <div className="genre-catalog">
-        {genres.map((genre) => (
-          <span key={genre}>{genre}</span>
-        ))}
-      </div>
-
-      <div className="organizer-workspace">
-        <textarea
-          value={story}
-          onChange={(event) => setStory(event.target.value)}
-          placeholder="Paste or write sections of your story here... Use a new line for each section."
-          aria-label="Story sections for genre organization"
-        />
-
-        <div className="organizer-results">
-          {sections.length === 0 ? (
-            <div className="organizer-empty">
-              <Sparkles size={18} />
-              <span>Your suggested genres will appear here.</span>
-            </div>
-          ) : (
-            sections.map(({ section, genre }, index) => (
-              <article className="genre-result" key={`${section}-${index}`}>
-                <span>0{index + 1}</span>
-                <div>
-                  <p>{section}</p>
-                  <strong>{genre}</strong>
-                </div>
-              </article>
-            ))
-          )}
-        </div>
-      </div>
-
-      <button className="primary-button organize-button" onClick={analyze} disabled={!story.trim()}>
-        <Sparkles size={16} />
-        Organize my story
-      </button>
+      {tab === 'Chat' && <RootedChat books={books} stories={stories} clubs={clubs} />}
     </section>
   )
 }

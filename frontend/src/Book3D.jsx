@@ -179,7 +179,7 @@ export default function Book3D() {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
-    camera.position.set(0, 0.5, 3)
+    camera.position.set(0, 0.35, 3.6)
     camera.lookAt(0, 0, 0)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
@@ -235,6 +235,8 @@ export default function Book3D() {
     scene.add(shadow)
 
     const bookRoot = new THREE.Group()
+    bookRoot.position.y = -0.1
+    bookRoot.rotation.y = 0.18
     scene.add(bookRoot)
 
     const raycaster = new THREE.Raycaster()
@@ -274,33 +276,6 @@ export default function Book3D() {
       camera.updateProjectionMatrix()
       if (rig.requestRender) rig.requestRender()
     }
-
-    const raycaster = new THREE.Raycaster()
-    const mouse = new THREE.Vector2()
-
-    const onTouch = (event) => {
-      const rect = mount.getBoundingClientRect()
-      const clientX = event.touches ? event.touches[0].clientX : event.clientX
-      const clientY = event.touches ? event.touches[0].clientY : event.clientY
-      
-      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
-      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
-
-      raycaster.setFromCamera(mouse, camera)
-      const intersects = raycaster.intersectObjects(bookRoot.children, true)
-
-      if (intersects.length > 0) {
-        const point = intersects[0].point
-        if (point.x > 0) {
-          nextPage()
-        } else {
-          prevPage()
-        }
-      }
-    }
-
-    mount.addEventListener('mousedown', onTouch)
-    mount.addEventListener('touchstart', onTouch)
 
     let frame = 0
     let last = performance.now()
@@ -475,7 +450,12 @@ export default function Book3D() {
 
         const ribbon = model.getObjectByName('Ribbon')
         if (ribbon) {
-          ribbon.material.color.set(0x9c2b24)
+          ribbon.visible = false
+          if (ribbon.material) {
+            ribbon.material.transparent = true
+            ribbon.material.opacity = 0
+            ribbon.material.depthWrite = false
+          }
         }
 
         rig.bookmarkMesh = new THREE.Mesh(
