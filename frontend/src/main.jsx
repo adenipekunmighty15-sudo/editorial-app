@@ -39,6 +39,7 @@ function App() {
   const [active, setActive] = useState('Home')
   const [writerOpen, setWriterOpen] = useState(false)
   const [readingStory, setReadingStory] = useState(null)
+  const [selectedClub, setSelectedClub] = useState(null)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
   const [books, setBooks] = useState(defaultBooks)
@@ -297,7 +298,10 @@ function App() {
           {readingStory && (
             <StoryReader story={readingStory} onBack={() => setReadingStory(null)} />
           )}
-          {!readingStory && (
+          {selectedClub && (
+            <ClubProfile club={selectedClub} onBack={() => setSelectedClub(null)} />
+          )}
+          {!readingStory && !selectedClub && (
             <>
               {active === 'Home' && (
                 <>
@@ -343,6 +347,10 @@ function App() {
                           book={book}
                           onSave={() => handleSaveBook(book.title)}
                           onUpdateProgress={handleUpdateProgress}
+                          onOpen={() => {
+                            setActive('Preview')
+                            // Logic to auto-open the book in Book3D would go here
+                          }}
                         />
                       ))}
                     </div>
@@ -366,21 +374,41 @@ function App() {
                             key={club.title}
                             club={club}
                             onJoin={() => handleJoinClub(club.title)}
+                            onOpen={setSelectedClub}
                           />
                         ))}
                       </div>
                     </div>
  
-                    <aside className="quote-card">
-                      <Sparkles size={19} />
-                      <p>“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”</p>
-                      <span>— Will Durant</span>
-                      <div className="quote-dots">
-                        <i />
-                        <i className="selected" />
-                        <i />
-                      </div>
-                    </aside>
+function QuoteCard() {
+  const quotes = [
+    { text: '“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”', author: 'Will Durant' },
+    { text: '“The only way to deal with an unfree world is to become so absolutely free that your very existence is an act of rebellion.”', author: 'Albert Camus' },
+    { text: '“He who has a why to live can bear almost any how.”', author: 'Friedrich Nietzsche' },
+    { text: '“Truth is not a destination, but a way of traveling.”', author: 'Unknown' },
+  ]
+  const [index, setIndex] = useState(0)
+ 
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex(prev => (prev + 1) % quotes.length)
+    }, 5000)
+    return () => clearInterval(timer)
+  }, [])
+ 
+  return (
+    <aside className="quote-card">
+      <Sparkles size={19} />
+      <p>{quotes[index].text}</p>
+      <span>— {quotes[index].author}</span>
+      <div className="quote-dots">
+        {quotes.map((_, i) => (
+          <i key={i} className={i === index ? 'selected' : ''} />
+        ))}
+      </div>
+    </aside>
+  )
+}
                   </section>
                 </>
               )}
@@ -390,14 +418,18 @@ function App() {
                   books={books} 
                   onSave={(title) => handleSaveBook(title)} 
                   onUpdateProgress={handleUpdateProgress}
+                  onOpen={(book) => {
+                    setActive('Preview')
+                    // Logic to auto-open the book in Book3D
+                  }}
                 />
               )}
               {active === 'Book clubs' && (
                 <ClubsView clubs={clubs} onJoin={handleJoinClub} />
               )}
-            {active === 'Stories' && (
-              <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} onRead={setReadingStory} />
-            )}
+              {active === 'Stories' && (
+                <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} onRead={setReadingStory} />
+              )}
               {active === 'Discover' && <DiscoveryFeed />}
               {active === 'Preview' && <BookPreview books={books} />}
               {active === 'Dashboard' && <WriterDashboard />}
@@ -552,7 +584,7 @@ function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
 
   return (
     <article className="book-card" onClick={() => onOpen?.(book)}>
-      <div className={`book-cover ${book.color}`}>
+      <div className={`book-cover ${book.color}`} style={{ cursor: 'pointer' }}>
         <img src={book.image} alt="" />
         <span className="cover-tag">{book.tag}</span>
         <button
@@ -585,10 +617,10 @@ function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
   )
 }
 
-function ClubCard({ club, onJoin }) {
+function ClubCard({ club, onJoin, onOpen }) {
   return (
     <article className="club-card">
-      <img src={club.image} alt="" />
+      <img src={club.image} alt="" onClick={() => onOpen?.(club)} style={{ cursor: 'pointer' }} />
       <div className="club-details">
         <span className="eyebrow">SMALL GROUP</span>
         <h3>{club.title}</h3>
