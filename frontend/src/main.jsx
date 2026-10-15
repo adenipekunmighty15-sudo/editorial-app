@@ -533,8 +533,21 @@ function ClubCard({ club, onJoin }) {
   )
 }
 
-function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen }) {
+function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen, onSuggest }) {
   const [filter, setFilter] = useState('For you')
+  const [suggestOpen, setSuggestOpen] = useState(false)
+  const [suggestion, setSuggestion] = useState({ title: '', author: '', reason: '' })
+
+  const handleSuggest = async () => {
+    try {
+      await api.addBook(suggestion)
+      setSuggestOpen(false)
+      setSuggestion({ title: '', author: '', reason: '' })
+      toast('Recommendation sent!')
+    } catch (e) {
+      toast('Failed to suggest book')
+    }
+  }
  
   const catalog = books.concat([
     { ...books[0], title: 'The Cost of Discipleship', author: 'Dietrich Bonhoeffer', color: 'ochre', progress: 0, tag: 'NON-FICTION' },
@@ -561,16 +574,7 @@ function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen })
         </div>
         <button
           className="primary-button"
-          onClick={() =>
-            onOpen?.({
-              title: 'A new recommendation',
-              author: 'Rooted editorial desk',
-              image: books[0].image,
-              tag: 'COMING SOON',
-              color: 'ochre',
-              progress: 0,
-            })
-          }
+          onClick={() => setSuggestOpen(true)}
         >
           <Plus size={17} />
           Suggest a book
@@ -604,15 +608,77 @@ function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen })
       <AIRecommendations books={books} />
  
       {filtered.length === 0 && <div className="empty-library">No books in this shelf yet. Try another genre.</div>}
+
+      {suggestOpen && (
+        <div className="modal-backdrop" onClick={() => setSuggestOpen(false)}>
+          <div className="profile-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="writer-toolbar">
+              <span className="writer-brand">SUGGEST A BOOK</span>
+              <button className="close-button" onClick={() => setSuggestOpen(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="profile-content">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                <label>
+                  <span className="eyebrow">BOOK TITLE</span>
+                  <input 
+                    className="editor-title" 
+                    style={{ width: '100%', fontSize: '1rem' }} 
+                    value={suggestion.title} 
+                    onChange={e => setSuggestion({...suggestion, title: e.target.value})}
+                  />
+                </label>
+                <label>
+                  <span className="eyebrow">AUTHOR</span>
+                  <input 
+                    className="editor-title" 
+                    style={{ width: '100%', fontSize: '1rem' }} 
+                    value={suggestion.author} 
+                    onChange={e => setSuggestion({...suggestion, author: e.target.value})}
+                  />
+                </label>
+                <label>
+                  <span className="eyebrow">WHY THIS BOOK?</span>
+                  <textarea 
+                    className="editor-body" 
+                    style={{ width: '100%', fontSize: '1rem', height: '100px' }} 
+                    value={suggestion.reason} 
+                    onChange={e => setSuggestion({...suggestion, reason: e.target.value})}
+                  />
+                </label>
+                <button className="primary-button" onClick={handleSuggest}>
+                  Send Recommendation
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 function ClubsView({ clubs = defaultClubs, onJoin }) {
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [newClub, setNewClub] = useState({ title: '', book: '' })
+
+  const handleCreateClub = async () => {
+    try {
+      await api.addClub(newClub)
+      setShowCreateModal(false)
+      setNewClub({ title: '', book: '' })
+      // Note: in a real app we'd refresh the clubs list from API
+      window.location.reload() 
+    } catch (e) {
+      alert('Failed to create club')
+    }
+  }
+
   const catalog = clubs.concat([
     { ...clubs[0], title: 'Women of the Word', book: 'The Hiding Place' },
   ])
-
+ 
   return (
     <div className="view">
       <div className="view-heading">
@@ -621,19 +687,59 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
           <h1>Read alongside others.</h1>
           <p>Five people, one book, a richer conversation.</p>
         </div>
-        <button className="primary-button">
+        <button className="primary-button" onClick={() => setShowCreateModal(true)}>
           <Plus size={17} />
           Create a club
         </button>
       </div>
-
+ 
       <div className="club-list wide">
         {catalog.map((club, index) => (
           <ClubCard key={`${club.title}-${index}`} club={club} onJoin={onJoin} />
         ))}
       </div>
-
+ 
       <ClubGuide clubs={catalog} />
+
+      {showCreateModal && (
+        <div className="modal-backdrop" onClick={() => setShowCreateModal(false)}>
+          <div className="profile-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '400px' }}>
+            <div className="writer-toolbar">
+              <span className="writer-brand">CREATE CLUB</span>
+              <button className="close-button" onClick={() => setShowCreateModal(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="profile-content">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1rem' }}>
+                <label>
+                  <span className="eyebrow">CLUB NAME</span>
+                  <input 
+                    className="editor-title" 
+                    style={{ width: '100%', fontSize: '1rem' }} 
+                    value={newClub.title} 
+                    onChange={e => setNewClub({...newClub, title: e.target.value})}
+                    placeholder="e.g. Friday Faith"
+                  />
+                </label>
+                <label>
+                  <span className="eyebrow">BOOK</span>
+                  <input 
+                    className="editor-title" 
+                    style={{ width: '100%', fontSize: '1rem' }} 
+                    value={newClub.book} 
+                    onChange={e => setNewClub({...newClub, book: e.target.value})}
+                    placeholder="e.g. The Great Gatsby"
+                  />
+                </label>
+                <button className="primary-button" onClick={handleCreateClub}>
+                  Create Club
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
