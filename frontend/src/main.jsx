@@ -38,6 +38,7 @@ const verses = [
 function App() {
   const [active, setActive] = useState('Home')
   const [writerOpen, setWriterOpen] = useState(false)
+  const [readingStory, setReadingStory] = useState(null)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
   const [books, setBooks] = useState(defaultBooks)
@@ -293,108 +294,116 @@ function App() {
         </aside>
 
         <main className="main-content">
-          {active === 'Home' && (
+          {readingStory && (
+            <StoryReader story={readingStory} onBack={() => setReadingStory(null)} />
+          )}
+          {!readingStory && (
             <>
-              <section className="hero">
-                <div className="hero-copy">
-                  <span className="eyebrow coral">YOUR DAILY INVITATION</span>
-                  <h1>
-                    Read deeply.<br />
-                    <em>Live fully.</em>
-                  </h1>
-                  <p>
-                    A thoughtful place for Christian books, honest stories, and the people reading alongside you.
-                  </p>
-                  <button className="primary-button" onClick={() => setActive('Library')}>
-                    Explore the library <ChevronRight size={17} />
-                  </button>
-                </div>
-
-                <div className="hero-art">
-                  <HeroBook3D />
-                  <div className="art-label">
-                    {dailyVerse.text}
-                    <span>{dailyVerse.ref}</span>
-                  </div>
-                </div>
-              </section>
-
-              <section className="section-block">
-                <div className="section-heading">
-                  <div>
-                    <span className="eyebrow">CONTINUE READING</span>
-                    <h2>Pick up where you left off</h2>
-                  </div>
-                  <button className="text-button" onClick={() => setActive('Library')}>
-                    View library <ChevronRight size={16} />
-                  </button>
-                </div>
-
-                <div className="book-grid">
-                  {books.map((book) => (
-                    <BookCard
-                      key={book.title}
-                      book={book}
-                      onSave={() => handleSaveBook(book.title)}
-                      onUpdateProgress={handleUpdateProgress}
-                    />
-                  ))}
-                </div>
-              </section>
-
-              <section className="lower-grid">
-                <div className="section-block clubs-block">
-                  <div className="section-heading">
-                    <div>
-                      <span className="eyebrow">READING TOGETHER</span>
-                      <h2>Find your people</h2>
+              {active === 'Home' && (
+                <>
+                  <section className="hero">
+                    <div className="hero-copy">
+                      <span className="eyebrow coral">YOUR DAILY INVITATION</span>
+                      <h1>
+                        Read deeply.<br />
+                        <em>Live fully.</em>
+                      </h1>
+                      <p>
+                        A thoughtful place for Christian books, honest stories, and the people reading alongside you.
+                      </p>
+                      <button className="primary-button" onClick={() => setActive('Library')}>
+                        Explore the library <ChevronRight size={17} />
+                      </button>
                     </div>
-                    <button className="text-button" onClick={() => setActive('Book clubs')}>
-                      All clubs <ChevronRight size={16} />
-                    </button>
-                  </div>
-
-                  <div className="club-list">
-                    {clubs.map((club) => (
-                      <ClubCard
-                        key={club.title}
-                        club={club}
-                        onJoin={() => handleJoinClub(club.title)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <aside className="quote-card">
-                  <Sparkles size={19} />
-                  <p>“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”</p>
-                  <span>— Will Durant</span>
-                  <div className="quote-dots">
-                    <i />
-                    <i className="selected" />
-                    <i />
-                  </div>
-                </aside>
-              </section>
+ 
+                    <div className="hero-art">
+                      <HeroBook3D />
+                      <div className="art-label">
+                        {dailyVerse.text}
+                        <span>{dailyVerse.ref}</span>
+                      </div>
+                    </div>
+                  </section>
+ 
+                  <section className="section-block">
+                    <div className="section-heading">
+                      <div>
+                        <span className="eyebrow">CONTINUE READING</span>
+                        <h2>Pick up where you left off</h2>
+                      </div>
+                      <button className="text-button" onClick={() => setActive('Library')}>
+                        View library <ChevronRight size={16} />
+                      </button>
+                    </div>
+ 
+                    <div className="book-grid">
+                      {books.map((book) => (
+                        <BookCard
+                          key={book.title}
+                          book={book}
+                          onSave={() => handleSaveBook(book.title)}
+                          onUpdateProgress={handleUpdateProgress}
+                        />
+                      ))}
+                    </div>
+                  </section>
+ 
+                  <section className="lower-grid">
+                    <div className="section-block clubs-block">
+                      <div className="section-heading">
+                        <div>
+                          <span className="eyebrow">READING TOGETHER</span>
+                          <h2>Find your people</h2>
+                        </div>
+                        <button className="text-button" onClick={() => setActive('Book clubs')}>
+                          All clubs <ChevronRight size={16} />
+                        </button>
+                      </div>
+ 
+                      <div className="club-list">
+                        {clubs.map((club) => (
+                          <ClubCard
+                            key={club.title}
+                            club={club}
+                            onJoin={() => handleJoinClub(club.title)}
+                          />
+                        ))}
+                      </div>
+                    </div>
+ 
+                    <aside className="quote-card">
+                      <Sparkles size={19} />
+                      <p>“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”</p>
+                      <span>— Will Durant</span>
+                      <div className="quote-dots">
+                        <i />
+                        <i className="selected" />
+                        <i />
+                      </div>
+                    </aside>
+                  </section>
+                </>
+              )}
+ 
+              {active === 'Library' && (
+                <LibraryView 
+                  books={books} 
+                  onSave={(title) => handleSaveBook(title)} 
+                  onUpdateProgress={handleUpdateProgress}
+                />
+              )}
+              {active === 'Book clubs' && (
+                <ClubsView clubs={clubs} onJoin={handleJoinClub} />
+              )}
+            {active === 'Stories' && (
+              <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} onRead={setReadingStory} />
+            )}
+              {active === 'Discover' && <DiscoveryFeed />}
+              {active === 'Preview' && <BookPreview books={books} />}
+              {active === 'Dashboard' && <WriterDashboard />}
             </>
           )}
-
-           {active === 'Library' && (
-             <LibraryView 
-               books={books} 
-               onSave={(title) => handleSaveBook(title)} 
-               onUpdateProgress={handleUpdateProgress}
-             />
-           )}
-           {active === 'Book clubs' && (
-             <ClubsView clubs={clubs} onJoin={handleJoinClub} />
-           )}
-           {active === 'Stories' && (
-             <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
-           )}
-           {active === 'Discover' && <DiscoveryFeed />}
-           {active === 'Preview' && <BookPreview books={books} />}
-           {active === 'Dashboard' && <WriterDashboard />}
+        </main>
         </main>
       </div>
 
@@ -808,7 +817,7 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
   )
 }
 
-function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite }) {
+function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite, onRead }) {
   const [storyLikes, setStoryLikes] = useState({})
   const [subscribedAuthors, setSubscribedAuthors] = useState([])
 
