@@ -21,10 +21,18 @@ async function request(path, options = {}) {
 export const api = {
   getBooks: () => request('/api/books'),
   addBook: (book) => request('/api/books', { method: 'POST', body: JSON.stringify(book) }),
+  updateBookProgress: (title, progress) => request(`/api/books/${encodeURIComponent(title)}/progress`, { 
+    method: 'PATCH', 
+    body: JSON.stringify({ progress }) 
+  }),
+  toggleBookSave: (title) => request(`/api/books/${encodeURIComponent(title)}/save`, { method: 'POST' }),
   getClubs: () => request('/api/clubs'),
   addClub: (club) => request('/api/clubs', { method: 'POST', body: JSON.stringify(club) }),
+  joinClub: (clubTitle) => request(`/api/clubs/${encodeURIComponent(clubTitle)}/join`, { method: 'POST' }),
   getStories: () => request('/api/stories'),
   addStory: (story) => request('/api/stories', { method: 'POST', body: JSON.stringify(story) }),
+  likeStory: (title) => request(`/api/stories/${encodeURIComponent(title)}/like`, { method: 'POST' }),
+  postNote: (note) => request('/api/notes', { method: 'POST', body: JSON.stringify({ content: note }) }),
 }
 
 export const ai = {

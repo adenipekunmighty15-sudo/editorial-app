@@ -69,9 +69,32 @@ function App() {
     }
   }, [])
 
-  const toast = (message) => {
-    setNotice(message)
-    window.setTimeout(() => setNotice(''), 2800)
+  const handleSaveBook = async (title) => {
+    try {
+      await api.toggleBookSave(title)
+      setBooks(current => current.map(b => b.title === title ? { ...b, saved: !b.saved } : b))
+      toast('Library updated')
+    } catch (e) {
+      toast('Failed to save book')
+    }
+  }
+
+  const handleUpdateProgress = async (title, progress) => {
+    try {
+      await api.updateBookProgress(title, progress)
+      setBooks(current => current.map(b => b.title === title ? { ...b, progress } : b))
+    } catch (e) {
+      // Silent fail for slider to prevent toast spam
+    }
+  }
+
+  const handleJoinClub = async (title) => {
+    try {
+      await api.joinClub(title)
+      toast(`Request sent to ${title}`)
+    } catch (e) {
+      toast('Failed to join club')
+    }
   }
 
   const navItems = [
@@ -250,7 +273,8 @@ function App() {
                     <BookCard
                       key={book.title}
                       book={book}
-                      onSave={() => toast(`${book.title} saved to your library`)}
+                      onSave={() => handleSaveBook(book.title)}
+                      onUpdateProgress={handleUpdateProgress}
                     />
                   ))}
                 </div>
@@ -273,7 +297,7 @@ function App() {
                       <ClubCard
                         key={club.title}
                         club={club}
-                        onJoin={() => toast(`Request sent to ${club.title}`)}
+                        onJoin={() => handleJoinClub(club.title)}
                       />
                     ))}
                   </div>
@@ -293,12 +317,16 @@ function App() {
             </>
           )}
 
-          {active === 'Library' && (
-            <LibraryView books={books} onSave={() => toast('Saved to your library')} />
-          )}
-          {active === 'Book clubs' && (
-            <ClubsView clubs={clubs} onJoin={() => toast('Request sent to the book club')} />
-          )}
+           {active === 'Library' && (
+             <LibraryView 
+               books={books} 
+               onSave={(title) => handleSaveBook(title)} 
+               onUpdateProgress={handleUpdateProgress}
+             />
+           )}
+           {active === 'Book clubs' && (
+             <ClubsView clubs={clubs} onJoin={handleJoinClub} />
+           )}
           {active === 'Stories' && (
             <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
           )}
@@ -440,31 +468,44 @@ function HeroBook3D() {
   return <div ref={mountRef} className="hero-3d" aria-label="Floating three dimensional leather book" />
 }
 
-function BookCard({ book, onSave, onOpen }) {
+function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
+  const [progress, setProgress] = useState(book.progress)
+
+  const handleProgressChange = (e) => {
+    const newProg = Number(e.target.value)
+    setProgress(newProg)
+    onUpdateProgress?.(book.title, newProg)
+  }
+
   return (
     <article className="book-card" onClick={() => onOpen?.(book)}>
       <div className={`book-cover ${book.color}`}>
         <img src={book.image} alt="" />
         <span className="cover-tag">{book.tag}</span>
         <button
-          className="save-button"
+          className={`save-button ${book.saved ? 'active' : ''}`}
           onClick={(event) => {
             event.stopPropagation()
             onSave?.()
           }}
           aria-label="Save book"
         >
-          <Bookmark size={17} />
+          <Bookmark size={17} fill={book.saved ? 'currentColor' : 'none'} />
         </button>
       </div>
       <div className="book-info">
         <h3>{book.title}</h3>
         <p>{book.author}</p>
         <div className="progress-row">
-          <div className="progress">
-            <span style={{ width: `${book.progress}%` }} />
-          </div>
-          <small>{book.progress}%</small>
+          <input 
+            type="range" 
+            min="0" 
+            max="100" 
+            value={progress} 
+            onChange={handleProgressChange}
+            className="progress-slider"
+          />
+          <small>{progress}%</small>
         </div>
       </div>
     </article>
@@ -492,13 +533,13 @@ function ClubCard({ club, onJoin }) {
   )
 }
 
-function LibraryView({ books = defaultBooks, onSave, onOpen }) {
+function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen }) {
   const [filter, setFilter] = useState('For you')
-
+ 
   const catalog = books.concat([
     { ...books[0], title: 'The Cost of Discipleship', author: 'Dietrich Bonhoeffer', color: 'ochre', progress: 0, tag: 'NON-FICTION' },
   ])
-
+ 
   const filtered =
     filter === 'For you'
       ? catalog
@@ -509,7 +550,7 @@ function LibraryView({ books = defaultBooks, onSave, onOpen }) {
           if (filter === 'Spiritual formation') return ['SPIRITUAL FORMATION', 'FORMATION'].includes(tag)
           return true
         })
-
+ 
   return (
     <div className="view">
       <div className="view-heading">
@@ -535,7 +576,7 @@ function LibraryView({ books = defaultBooks, onSave, onOpen }) {
           Suggest a book
         </button>
       </div>
-
+ 
       <div className="filter-row">
         {['For you', 'Fiction', 'Non-fiction', 'Spiritual formation'].map((item) => (
           <button
@@ -547,15 +588,21 @@ function LibraryView({ books = defaultBooks, onSave, onOpen }) {
           </button>
         ))}
       </div>
-
+ 
       <div className="library-grid">
         {filtered.map((book, index) => (
-          <BookCard key={`${book.title}-${index}`} book={book} onSave={onSave} onOpen={onOpen} />
+          <BookCard 
+            key={`${book.title}-${index}`} 
+            book={book} 
+            onSave={() => onSave(book.title)} 
+            onUpdateProgress={onUpdateProgress}
+            onOpen={onOpen} 
+          />
         ))}
       </div>
-
+ 
       <AIRecommendations books={books} />
-
+ 
       {filtered.length === 0 && <div className="empty-library">No books in this shelf yet. Try another genre.</div>}
     </div>
   )
