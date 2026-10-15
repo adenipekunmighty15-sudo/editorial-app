@@ -105,6 +105,7 @@ function App() {
     { label: 'Library', icon: Library },
     { label: 'Book clubs', icon: Users },
     { label: 'Stories', icon: PenLine },
+    { label: 'Discover', icon: Sparkles },
     { label: 'Preview', icon: BookOpen },
     { label: 'Dashboard', icon: FileText },
   ]
@@ -391,6 +392,7 @@ function App() {
            {active === 'Stories' && (
              <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} />
            )}
+           {active === 'Discover' && <DiscoveryFeed />}
            {active === 'Preview' && <BookPreview books={books} />}
            {active === 'Dashboard' && <WriterDashboard />}
         </main>
