@@ -894,7 +894,9 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
         </div>
  
         <div className="story-feature">
-          <div className="story-image" />
+          <div className="story-image" style={{ position: 'relative', overflow: 'hidden' }}>
+             <div className="story-animation-overlay" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(45deg, rgba(0,0,0,0.2), transparent)', pointerEvents: 'none' }} />
+          </div>
           <div>
             <span className="eyebrow">FEATURED STORY · 8 MIN READ</span>
             <h2 onClick={() => onRead({ title: 'The grace of beginning again', author: 'Amara Okafor', content: '...' })} style={{ cursor: 'pointer' }}>The grace of beginning again</h2>
@@ -1195,9 +1197,12 @@ function WriterDashboard() {
           {myStories.map((story, idx) => (
             <article className="story-row" key={idx}>
               <span className="story-number">0{idx + 1}</span>
-              <div>
-                <h3>{story.title}</h3>
-                <p>{story.readTime} min read · {story.views || 0} views</p>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: 0 }}>{story.title}</h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>
+                  {story.readTime} min read · {story.views || 0} views · 
+                  <span style={{ marginLeft: '8px', color: 'coral' }}>{Math.round((story.views / 1000) * 100)}% reach</span>
+                </p>
               </div>
               <button className="text-button">Edit</button>
             </article>
