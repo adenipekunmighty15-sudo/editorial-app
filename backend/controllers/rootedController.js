@@ -1,53 +1,49 @@
-const Book = require('../models/Book');
-const Club = require('../models/Club');
-const Story = require('../models/Story');
+const supabase = require('../config/supabase');
 
 const handle = (res, fn) =>
   fn().catch((error) => {
-    if (error.name === 'ValidationError') {
-      return res.status(400).json({
-        error: 'Validation failed',
-        details: Object.values(error.errors).map((e) => e.message),
-      });
-    }
-    if (error.name === 'CastError') {
-      return res.status(400).json({ error: 'Invalid value supplied' });
-    }
-    return res.status(500).json({ error: 'Server error' });
+    console.error('Controller Error:', error);
+    return res.status(500).json({ error: error.message || 'Server error' });
   });
 
 exports.getBooks = (req, res) =>
   handle(res, async () => {
-    const books = await Book.find();
-    res.json(books);
+    const { data, error } = await supabase.from('books').select('*');
+    if (error) throw error;
+    res.json(data);
   });
 
 exports.addBook = (req, res) =>
   handle(res, async () => {
-    const book = await Book.create(req.body);
-    res.status(201).json(book);
+    const { data, error } = await supabase.from('books').insert([req.body]).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
   });
 
 exports.getClubs = (req, res) =>
   handle(res, async () => {
-    const clubs = await Club.find();
-    res.json(clubs);
+    const { data, error } = await supabase.from('clubs').select('*');
+    if (error) throw error;
+    res.json(data);
   });
 
 exports.addClub = (req, res) =>
   handle(res, async () => {
-    const club = await Club.create(req.body);
-    res.status(201).json(club);
+    const { data, error } = await supabase.from('clubs').insert([req.body]).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
   });
 
 exports.getStories = (req, res) =>
   handle(res, async () => {
-    const stories = await Story.find();
-    res.json(stories);
+    const { data, error } = await supabase.from('stories').select('*');
+    if (error) throw error;
+    res.json(data);
   });
 
 exports.addStory = (req, res) =>
   handle(res, async () => {
-    const story = await Story.create(req.body);
-    res.status(201).json(story);
+    const { data, error } = await supabase.from('stories').insert([req.body]).select().single();
+    if (error) throw error;
+    res.status(201).json(data);
   });

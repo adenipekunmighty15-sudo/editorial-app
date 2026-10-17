@@ -10,7 +10,7 @@ const connectDB = require('./config/db');
 const rootedRoutes = require('./routes/rootedRoutes');
 
 dotenv.config();
-connectDB();
+// connectDB(); // MongoDB connection removed in favor of Supabase
 
 const app = express();
 

@@ -1,11 +1,12 @@
 import { StrictMode, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Bookmark, BookOpen, Check, ChevronRight, Eye, EyeOff, FileText, Flame, Heart, Home, Library, Menu, PenLine, Plus, Search, Send, Sparkles, Users, WandSparkles, X } from 'lucide-react'
+import { Bell, Bookmark, BookOpen, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, FileText, Flame, Heart, Home, Library, Menu, MessageCircle, PenLine, Plus, Search, Send, Settings2, Sparkles, Users, WandSparkles, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import * as THREE from 'three'
 import { ai, api } from './api'
 import { AIRecommendations, ClubGuide, GenreOrganizer, RootedChat } from './AIWidgets'
 import Book3D from './Book3D'
+import { supabase } from './supabaseClient'
 import './styles.css'
 
 const ToastContext = createContext(() => {})
@@ -25,6 +26,11 @@ const defaultStories = [
   { title: 'On prayer when words fail', author: 'Dami Adeyemi', readTime: 4, likes: 12, excerpt: 'Some prayers are only silence.' },
   { title: 'A field guide to holy friendship', author: 'Paps O.', readTime: 5, likes: 8, excerpt: 'Friendship as a spiritual discipline.' },
   { title: 'The table is bigger than we thought', author: 'Ifeoluwa A.', readTime: 6, likes: 21, excerpt: 'On hospitality and belonging.' },
+]
+
+const defaultClubDiscussion = [
+  { author: 'Amara Okafor', time: 'Today · 9:12 AM', text: 'What line from this week stayed with you after you closed the book?', likes: 3 },
+  { author: 'Paps O.', time: 'Yesterday · 6:40 PM', text: 'I noticed how a slower pace changed the way I read this chapter. Curious if anyone else felt that shift.', likes: 2 },
 ]
 
 const verses = [
@@ -108,7 +114,7 @@ function EntryFlow({ onEnter }) {
     setConfirmPassword('')
   }
 
-  const handleSubmit = async (event) => {
+async function handleSubmit(event) {
     event.preventDefault()
     setError('')
     const normalizedEmail = email.trim().toLowerCase()
@@ -116,36 +122,14 @@ function EntryFlow({ onEnter }) {
       setError('Enter a valid email address.')
       return
     }
-    if (mode === 'reset') {
-      if (password.length < 8) {
-        setError('Use at least 8 characters for your password.')
-        return
-      }
-      if (password !== confirmPassword) {
-        setError('Those passwords do not match.')
-        return
-      }
-      const savedAccount = JSON.parse(localStorage.getItem('rooted.local-account') || 'null')
-      if (!savedAccount || savedAccount.email !== normalizedEmail) {
-        setError('No Rooted account was found for that email on this device.')
-        return
-      }
-      const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
-      savedAccount.salt = salt
-      savedAccount.passwordHash = await hashPassword(password, salt)
-      localStorage.setItem('rooted.local-account', JSON.stringify(savedAccount))
-      switchMode('sign-in')
-      setError('Password updated. Sign in to continue.')
-      return
-    }
 
     if (password.length < 8) {
       setError('Use at least 8 characters for your password.')
       return
     }
+
     setBusy(true)
     try {
-      const savedAccount = JSON.parse(localStorage.getItem('rooted.local-account') || 'null')
       if (mode === 'create') {
         if (!name.trim()) {
           setError('Add your name to create an account.')
@@ -155,23 +139,28 @@ function EntryFlow({ onEnter }) {
           setError('Those passwords do not match.')
           return
         }
-        if (savedAccount?.email === normalizedEmail) {
-          setError('An account already exists on this device. Sign in instead.')
-          return
-        }
-        const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
-        const account = { name: name.trim(), email: normalizedEmail, salt, passwordHash: await hashPassword(password, salt) }
-        localStorage.setItem('rooted.local-account', JSON.stringify(account))
-        onEnter({ name: account.name, email: account.email })
-        return
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password: password,
+          options: { data: { full_name: name.trim() } },
+        })
+        if (signUpError) throw signUpError
+        onEnter({ name: data.user?.user_metadata?.full_name || name.trim(), email: data.user?.email })
+      } else if (mode === 'sign-in') {
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password: password,
+        })
+        if (signInError) throw signInError
+        onEnter({ name: data.user?.user_metadata?.full_name || 'Reader', email: data.user?.email })
+      } else if (mode === 'reset') {
+        const { error: resetError } = await supabase.auth.resetPasswordForEmail(normalizedEmail)
+        if (resetError) throw resetError
+        setError('Password reset link sent to your email.')
+        switchMode('welcome')
       }
-      if (!savedAccount || savedAccount.email !== normalizedEmail || await hashPassword(password, savedAccount.salt) !== savedAccount.passwordHash) {
-        setError('Email or password is incorrect on this device.')
-        return
-      }
-      onEnter({ name: savedAccount.name, email: savedAccount.email })
-    } catch {
-      setError('Secure account storage is unavailable in this browser.')
+    } catch (err) {
+      setError(err.message || 'Authentication failed.')
     } finally {
       setBusy(false)
     }
@@ -188,6 +177,11 @@ function EntryFlow({ onEnter }) {
           <div className="entry-actions">
             <button className="primary-button" onClick={() => switchMode('create')}>Create your account <ChevronRight size={17} /></button>
             <button className="entry-secondary" onClick={() => switchMode('sign-in')}>Sign in</button>
+          </div>
+          <div className="entry-highlights">
+            <div><Library size={17} /><span><strong>Your shelves</strong><small>Keep your place</small></span></div>
+            <div><Users size={17} /><span><strong>Reading circles</strong><small>Meet around a book</small></span></div>
+            <div><PenLine size={17} /><span><strong>Story room</strong><small>Share what stays</small></span></div>
           </div>
           <button className="guest-link" onClick={() => onEnter({ name: 'Guest Reader', email: '' })}>Explore as a guest</button>
           <span className="entry-privacy">Preview accounts stay on this device.</span>
@@ -224,7 +218,8 @@ function EntryFlow({ onEnter }) {
 }
 
 function App() {
-  const [session, setSession] = useStoredState('rooted.session', null)
+  const [session, setSession] = useState(null)
+  const [accountEmail, setAccountEmail] = useState('')
   const [active, setActive] = useState('Home')
   const [writerOpen, setWriterOpen] = useState(false)
   const [editingStory, setEditingStory] = useState(null)
@@ -237,6 +232,8 @@ function App() {
   const [clubs, setClubs] = useStoredState('rooted.clubs', defaultClubs)
   const [stories, setStories] = useStoredState('rooted.stories', defaultStories)
   const [joinedClubs, setJoinedClubs] = useStoredState('rooted.joined-clubs', [])
+  const [readingGoal, setReadingGoal] = useStoredState('rooted.reading-goal', 4)
+  const [readingSessions, setReadingSessions] = useStoredState('rooted.reading-sessions', [])
   const [previewBook, setPreviewBook] = useState(defaultBooks[0])
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -246,32 +243,14 @@ function App() {
   const toast = (message) => setNotice(message)
 
   useEffect(() => {
-    if (!notice) return undefined
-    const timer = window.setTimeout(() => setNotice(''), 2800)
-    return () => window.clearTimeout(timer)
-  }, [notice])
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      try {
-        const [remoteBooks, remoteClubs, remoteStories] = await Promise.all([
-          api.getBooks(),
-          api.getClubs(),
-          api.getStories(),
-        ])
-        if (cancelled) return
-        if (remoteBooks.length) setBooks(remoteBooks)
-        if (remoteClubs.length) setClubs(remoteClubs)
-        if (remoteStories.length) setStories(remoteStories)
-      } catch {
-        // Backend unavailable — keep the bundled defaults.
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      if (currentSession) {
+        setSession(currentSession.user)
+      } else {
+        setSession(null)
       }
-    }
-    load()
-    return () => {
-      cancelled = true
-    }
+    })
+    return () => subscription.unsubscribe()
   }, [])
 
   if (!session) return <EntryFlow onEnter={setSession} />
@@ -289,6 +268,30 @@ function App() {
     if (joinedClubs.includes(title)) return
     setJoinedClubs((current) => [...current, title])
     toast(`Request sent to ${title}`)
+  }
+
+  const saveSettings = () => {
+    const normalizedEmail = accountEmail.trim().toLowerCase()
+    if (normalizedEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      toast('Enter a valid email address')
+      return
+    }
+    const previousEmail = session.email
+    setSession((current) => ({ ...current, email: normalizedEmail }))
+    if (previousEmail && normalizedEmail) {
+      try {
+        const account = JSON.parse(localStorage.getItem('rooted.local-account') || 'null')
+        if (account?.email === previousEmail) {
+          account.email = normalizedEmail
+          localStorage.setItem('rooted.local-account', JSON.stringify(account))
+        }
+      } catch {
+        toast('Could not update local account storage')
+        return
+      }
+    }
+    setSettingsOpen(false)
+    toast('Settings saved')
   }
 
   const navItems = [
@@ -310,6 +313,17 @@ function App() {
   }
 
   const dailyVerse = verses[new Date().getDate() % verses.length]
+  const readingDayKeys = new Set(readingSessions.map((item) => {
+    const date = new Date(item.date)
+    return `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`
+  }))
+  const streakDate = new Date()
+  streakDate.setHours(0, 0, 0, 0)
+  let readingStreak = 0
+  while (readingDayKeys.has(`${streakDate.getFullYear()}-${streakDate.getMonth()}-${streakDate.getDate()}`)) {
+    readingStreak += 1
+    streakDate.setDate(streakDate.getDate() - 1)
+  }
 
   const handleSearch = (q) => {
     if (!q.trim()) return
@@ -338,7 +352,7 @@ function App() {
            <button className="icon-button mobile-menu" aria-label="Menu" onClick={() => setMenuOpen(!menuOpen)}>
              <Menu size={20} />
            </button>
-           <button className="avatar" aria-label="Open profile" onClick={() => setProfileOpen(true)}>M</button>
+           <button className="avatar" aria-label="Open profile" onClick={() => setProfileOpen(true)}>{session.name.charAt(0).toUpperCase()}</button>
        </div>
      </header>
 
@@ -377,7 +391,7 @@ function App() {
             </div>
             <div className="profile-content">
               <div className="profile-header">
-                <div className="avatar large">M</div>
+                <div className="avatar large">{session.name.charAt(0).toUpperCase()}</div>
                 <h2>{session.name}</h2>
                 <p>Dedicated Reader & Writer</p>
               </div>
@@ -435,10 +449,13 @@ function App() {
                   <input 
                     className="editor-title" 
                     style={{ fontSize: '1rem', padding: '0.5rem' }} 
-                    defaultValue="mighty@example.com" 
+                    type="email"
+                    value={accountEmail}
+                    onChange={(event) => setAccountEmail(event.target.value)}
+                    placeholder="Email address"
                   />
                 </div>
-                <button className="primary-button" style={{ width: '100%', marginTop: '1rem' }} onClick={() => setSettingsOpen(false)}>
+                <button className="primary-button" style={{ width: '100%', marginTop: '1rem' }} onClick={saveSettings}>
                   Save Changes
                 </button>
               </div>
@@ -450,7 +467,7 @@ function App() {
      <div className="layout">
         <aside className="sidebar">
           <div className="welcome">
-            <span className="eyebrow">GOOD MORNING, MIGHTY</span>
+            <span className="eyebrow">GOOD MORNING, {session.name.toUpperCase()}</span>
             <h2>
               Make room
               <br />
@@ -478,10 +495,10 @@ function App() {
                 <Flame size={19} />
               </div>
               <div>
-                <strong>12 day streak</strong>
-                <span>Keep showing up</span>
+                <strong>{readingStreak} day streak</strong>
+                <span>{readingStreak ? 'Keep your rhythm' : 'Start your rhythm today'}</span>
               </div>
-              <span className="streak-count">12</span>
+              <span className="streak-count">{readingStreak}</span>
             </div>
             <button className="write-button" onClick={() => setWriterOpen(true)}>
               <Plus size={17} />
@@ -501,6 +518,11 @@ function App() {
               onBack={() => setSelectedClub(null)}
               onJoin={() => handleJoinClub(selectedClub.title)}
               joined={joinedClubs.includes(selectedClub.title)}
+              author={session.name}
+              onUpdate={(updatedClub) => {
+                setClubs((current) => current.map((item) => item.title === selectedClub.title ? updatedClub : item))
+                setSelectedClub(updatedClub)
+              }}
             />
           )}
           {selectedAuthor && (
@@ -533,6 +555,20 @@ function App() {
                       </div>
                     </div>
                   </section>
+
+                  <ReadingPulse
+                    books={books}
+                    clubs={clubs}
+                    readingGoal={readingGoal}
+                    readingSessions={readingSessions}
+                    onLogReading={() => {
+                      const currentBook = books.find((book) => Number(book.progress) > 0 && Number(book.progress) < 100)
+                      setReadingSessions((current) => [...current, { date: new Date().toISOString(), title: currentBook?.title || 'Reading time' }])
+                      toast('Reading session logged')
+                    }}
+                    onLibrary={() => navigateTo('Library')}
+                    onClubs={() => navigateTo('Book clubs')}
+                  />
   
                   <section className="section-block">
                     <div className="section-heading">
@@ -610,11 +646,11 @@ function App() {
                 />
               )}
               {active === 'Stories' && (
-                <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onRead={setReadingStory} onAuthor={setSelectedAuthor} />
+                <StoriesView books={books} clubs={clubs} stories={stories} author={session.name} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onRead={setReadingStory} onAuthor={setSelectedAuthor} />
               )}
-              {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} onRead={setReadingStory} />}
+              {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} author={session.name} onRead={setReadingStory} />}
               {active === 'Preview' && <BookPreview books={books} book={previewBook} onSelect={setPreviewBook} />}
-              {active === 'Dashboard' && <WriterDashboard stories={stories} author={session.name} onEdit={(story) => { setEditingStory(story); setWriterOpen(true) }} />}
+              {active === 'Dashboard' && <WriterDashboard stories={stories} books={books} author={session.name} readingGoal={readingGoal} setReadingGoal={setReadingGoal} readingSessions={readingSessions} setReadingSessions={setReadingSessions} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onEdit={(story) => { setEditingStory(story); setWriterOpen(true) }} />}
             </>
           )}
         </main>
@@ -653,6 +689,43 @@ function App() {
       )}
     </div>
     </ToastContext.Provider>
+  )
+}
+
+function ReadingPulse({ books, clubs, readingGoal, readingSessions, onLogReading, onLibrary, onClubs }) {
+  const today = new Date()
+  const days = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(today)
+    date.setDate(today.getDate() - (6 - index))
+    const count = readingSessions.filter((session) => new Date(session.date).toDateString() === date.toDateString()).length
+    return { date, count }
+  })
+  const sessionsThisWeek = days.reduce((total, day) => total + day.count, 0)
+  const currentBook = books.find((book) => Number(book.progress) > 0 && Number(book.progress) < 100)
+  const goal = Math.max(1, Number(readingGoal) || 4)
+
+  return (
+    <section className="reading-pulse" aria-labelledby="reading-pulse-title">
+      <div className="pulse-heading">
+        <div><span className="eyebrow coral">YOUR READING LIFE</span><h2 id="reading-pulse-title">A little time adds up.</h2></div>
+        <span className="pulse-week-label">THIS WEEK</span>
+      </div>
+      <div className="pulse-layout">
+        <div className="pulse-current-book">
+          <div className="pulse-cover"><img src={currentBook?.image || books[0]?.image} alt="" /><span>{currentBook?.progress || 0}%</span></div>
+          <div className="pulse-current-copy"><span className="eyebrow">BACK ON YOUR SHELF</span><strong>{currentBook?.title || 'Choose your next book'}</strong><small>{currentBook?.author || 'Your library is ready'}</small>
+            <div className="pulse-progress" role="progressbar" aria-label="Current book progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={currentBook?.progress || 0}><span style={{ width: `${currentBook?.progress || 0}%` }} /></div>
+          </div>
+        </div>
+        <div className="pulse-week">
+          <div className="pulse-chart" aria-label={`${sessionsThisWeek} reading sessions this week`}>
+            {days.map(({ date, count }, index) => <div className="pulse-day" key={date.toISOString()}><span className="pulse-bar-track"><i className={count ? 'has-session' : ''} style={{ height: `${count ? Math.min(100, 28 + count * 24) : 8}%` }} /></span><small>{['M', 'T', 'W', 'T', 'F', 'S', 'S'][index]}</small></div>)}
+          </div>
+          <div className="pulse-summary"><strong>{sessionsThisWeek} <span>sessions</span></strong><small>One quiet moment at a time</small></div>
+        </div>
+      </div>
+      <div className="pulse-actions"><button className="text-button" onClick={onLibrary}><Library size={15} /> Open library</button><button className="text-button" onClick={onClubs}><Users size={15} /> {clubs.length} circles</button><button className="primary-button" onClick={onLogReading}><Clock3 size={15} /> Log reading</button><span className="pulse-goal-hint">Weekly aim · {goal} sessions</span></div>
+    </section>
   )
 }
 
@@ -1058,10 +1131,12 @@ function ClubsView({ clubs = defaultClubs, onJoin, joinedClubs = [], onCreate, o
   )
 }
 
-function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite, onRead, onAuthor }) {
+function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, author = 'Reader', onWrite, onRead, onAuthor }) {
   const toast = useContext(ToastContext)
   const [storyLikes, setStoryLikes] = useStoredState('rooted.story-likes', {})
   const [subscribedAuthors, setSubscribedAuthors] = useStoredState('rooted.subscribed-authors', [])
+  const [feedFilter, setFeedFilter] = useState('For you')
+  const [storyQuery, setStoryQuery] = useState('')
 
   const handleLike = (title) => {
     const story = stories.find((item) => item.title === title)
@@ -1077,6 +1152,15 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
     setSubscribedAuthors((current) => [...current, author])
     toast(`Subscribed to ${author}`)
   }
+
+  const visibleStories = stories.filter((story) => {
+    if (feedFilter === 'Following' && !subscribedAuthors.includes(story.author)) return false
+    if (feedFilter === 'Liked' && !storyLikes[story.title]?.liked) return false
+    const normalizedQuery = storyQuery.trim().toLowerCase()
+    return !normalizedQuery || [story.title, story.author, story.excerpt].some((value) => value?.toLowerCase().includes(normalizedQuery))
+  }).sort((first, second) => feedFilter === 'Most loved'
+    ? (storyLikes[second.title]?.count ?? second.likes ?? 0) - (storyLikes[first.title]?.count ?? first.likes ?? 0)
+    : 0)
 
   return (
     <>
@@ -1120,11 +1204,17 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
         </div>
  
         <div className="story-list">
-          <div>
+          <div className="story-list-heading">
             <span className="eyebrow">FROM THE COMMUNITY</span>
             <h2>Freshly published</h2>
           </div>
-          {stories.map((story, index) => (
+          <div className="story-feed-toolbar">
+            <div className="story-filter-tabs" role="tablist" aria-label="Story feed filters">
+              {['For you', 'Following', 'Liked', 'Most loved'].map((item) => <button key={item} role="tab" aria-selected={feedFilter === item} className={feedFilter === item ? 'story-filter active' : 'story-filter'} onClick={() => setFeedFilter(item)}>{item}</button>)}
+            </div>
+            <label className="story-search"><Search size={15} /><input value={storyQuery} onChange={(event) => setStoryQuery(event.target.value)} placeholder="Find a story" aria-label="Search stories" /></label>
+          </div>
+          {visibleStories.map((story, index) => (
             <article className="story-row" key={`${story.title}-${index}`}>
               <span className="story-number">0{index + 1}</span>
               <div style={{ cursor: 'pointer' }} onClick={() => onRead(story)}>
@@ -1150,10 +1240,11 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
               </button>
             </article>
           ))}
+          {visibleStories.length === 0 && <div className="story-empty"><BookOpen size={20} /><strong>No stories in this view yet.</strong><span>Try another filter or follow a writer you enjoy.</span></div>}
         </div>
       </div>
  
-      <PublicationHub books={books} clubs={clubs} stories={stories} onRead={onRead} />
+      <PublicationHub books={books} clubs={clubs} stories={stories} author={author} onRead={onRead} />
       <GenreOrganizer />
     </>
   )
@@ -1207,24 +1298,154 @@ function StoryReader({ story, onBack, onAuthor }) {
   )
 }
 
-function ClubProfile({ club, onBack, onJoin, joined }) {
+function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader' }) {
+  const toast = useContext(ToastContext)
+  const [tab, setTab] = useState('Overview')
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [message, setMessage] = useState('')
+  const [settingsByClub, setSettingsByClub] = useStoredState('rooted.club-settings', {})
+  const [postsByClub, setPostsByClub] = useStoredState('rooted.club-discussions', {})
+  const preferences = settingsByClub[club.title] || { reminders: true, digest: true, pace: 'Weekly' }
+  const [clubBasics, setClubBasics] = useState({
+    title: club.title,
+    book: club.book,
+    meeting: club.meeting || 'Sunday · 6:30 PM',
+    privacy: club.privacy || 'Invite only',
+    memberApproval: club.memberApproval ?? true,
+  })
+  const posts = postsByClub[club.title] || defaultClubDiscussion
+
+  useEffect(() => {
+    setClubBasics({
+      title: club.title,
+      book: club.book,
+      meeting: club.meeting || 'Sunday · 6:30 PM',
+      privacy: club.privacy || 'Invite only',
+      memberApproval: club.memberApproval ?? true,
+    })
+  }, [club.title, club.book, club.meeting, club.privacy, club.memberApproval])
+  const memberNames = ['Amara Okafor', 'Paps O.', author, 'Ifeoluwa A.']
+
+  const updatePreference = (key, value) => {
+    setSettingsByClub((current) => ({
+      ...current,
+      [club.title]: { ...preferences, [key]: value },
+    }))
+  }
+
+  const saveClubSettings = () => {
+    const title = clubBasics.title.trim()
+    const book = clubBasics.book.trim()
+    if (!title || !book) {
+      toast('Add a club name and current book')
+      return
+    }
+    const updatedClub = { ...club, ...clubBasics, title, book, time: clubBasics.meeting }
+    onUpdate?.(updatedClub)
+    if (title !== club.title) {
+      setSettingsByClub((current) => {
+        const next = { ...current }
+        if (next[club.title]) {
+          next[title] = next[club.title]
+          delete next[club.title]
+        }
+        return next
+      })
+    }
+    toast('Club settings saved')
+  }
+
+  const postMessage = (event) => {
+    event.preventDefault()
+    const content = message.trim()
+    if (!content) return
+    setPostsByClub((current) => ({
+      ...current,
+      [club.title]: [{ author, time: 'Just now', text: content, likes: 0 }, ...posts],
+    }))
+    setMessage('')
+    toast('Your note was added to the discussion')
+  }
+
+  const toggleLike = (postIndex) => {
+    setPostsByClub((current) => {
+      const currentPosts = current[club.title] || posts
+      return {
+        ...current,
+        [club.title]: currentPosts.map((post, index) => index === postIndex
+          ? { ...post, liked: !post.liked, likes: Math.max(0, post.likes + (post.liked ? -1 : 1)) }
+          : post),
+      }
+    })
+  }
+
   return (
     <section className="club-profile">
-      <button className="text-button" onClick={onBack}><ChevronRight className="back-chevron" size={16} /> All book clubs</button>
+      <div className="club-profile-toolbar">
+        <button className="text-button" onClick={onBack}><ChevronRight className="back-chevron" size={16} /> All book clubs</button>
+        <button className={`icon-button club-settings-trigger ${settingsOpen ? 'active' : ''}`} onClick={() => setSettingsOpen((value) => !value)} aria-label="Open club settings" title="Club settings"><Settings2 size={17} /></button>
+      </div>
       <div className="club-profile-hero">
         <img src={club.image} alt="" />
         <div>
           <span className="eyebrow coral">ROOTED BOOK CLUB</span>
           <h1>{club.title}</h1>
-          <p>Reading <strong>{club.book}</strong> together</p>
-          <div className="club-profile-meta"><span>{club.members} readers</span><span>{club.time}</span></div>
+          <p>Reading <strong>{club.book}</strong> together. A small circle for thoughtful pages and honest conversation.</p>
+          <div className="club-profile-meta"><span><Users size={14} /> {club.members} readers</span><span><Clock3 size={14} /> {club.time}</span></div>
           <button className="primary-button" onClick={onJoin} disabled={joined}>{joined ? 'Request sent' : 'Request to join'}</button>
         </div>
       </div>
-      <div className="club-profile-grid">
-        <section><span className="eyebrow">HOW IT WORKS</span><h2>A small table for good conversation.</h2><p>Read at your own pace, bring a question, and make room for different perspectives. New members can join when a seat opens.</p></section>
-        <ClubGuide clubs={[club]} />
-      </div>
+
+      {settingsOpen && (
+        <section className="club-settings-panel">
+          <div className="club-section-heading"><div><span className="eyebrow coral">YOUR PREFERENCES</span><h2>Club settings</h2></div><button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="Close club settings"><X size={17} /></button></div>
+          <div className="club-settings-grid">
+            <label className="club-setting-row"><span><strong>Club name</strong><small>Shown to members</small></span><input className="club-settings-text" value={clubBasics.title} onChange={(event) => setClubBasics((current) => ({ ...current, title: event.target.value }))} maxLength={80} /></label>
+            <label className="club-setting-row"><span><strong>Current book</strong><small>The group's shared read</small></span><input className="club-settings-text" value={clubBasics.book} onChange={(event) => setClubBasics((current) => ({ ...current, book: event.target.value }))} maxLength={120} /></label>
+            <label className="club-setting-row"><span><strong>Meet cadence</strong><small>Set the gathering rhythm</small></span><select value={clubBasics.meeting} onChange={(event) => setClubBasics((current) => ({ ...current, meeting: event.target.value }))}><option>Sunday · 6:30 PM</option><option>Wednesday · 7:00 PM</option><option>Saturday · 10:00 AM</option><option>Monthly · first Sunday</option></select></label>
+            <label className="club-setting-row"><span><strong>Visibility</strong><small>Who can discover the club</small></span><select value={clubBasics.privacy} onChange={(event) => setClubBasics((current) => ({ ...current, privacy: event.target.value }))}><option>Invite only</option><option>Discoverable</option></select></label>
+            <label className="club-setting-row"><span><strong>Approve members</strong><small>Review requests before they join</small></span><input type="checkbox" checked={clubBasics.memberApproval} onChange={(event) => setClubBasics((current) => ({ ...current, memberApproval: event.target.checked }))} /></label>
+            <label className="club-setting-row"><span><strong>Meeting reminders</strong><small>Get a nudge before the next gathering</small></span><input type="checkbox" checked={preferences.reminders} onChange={(event) => updatePreference('reminders', event.target.checked)} /></label>
+            <label className="club-setting-row"><span><strong>Weekly digest</strong><small>Receive the discussion highlights</small></span><input type="checkbox" checked={preferences.digest} onChange={(event) => updatePreference('digest', event.target.checked)} /></label>
+            <label className="club-setting-row"><span><strong>Reading pace</strong><small>How often the group checks in</small></span><select value={preferences.pace} onChange={(event) => updatePreference('pace', event.target.value)}><option>Weekly</option><option>Every two weeks</option><option>Monthly</option></select></label>
+          </div>
+          <button className="primary-button club-settings-save" onClick={saveClubSettings}><Check size={15} /> Save club settings</button>
+        </section>
+      )}
+
+      <nav className="club-tabs" aria-label="Club sections">
+        {['Overview', 'Discussion', 'Reading plan', 'Members'].map((item) => <button key={item} className={tab === item ? 'club-tab active' : 'club-tab'} onClick={() => setTab(item)}>{item}</button>)}
+      </nav>
+
+      {tab === 'Overview' && (
+        <div className="club-profile-grid">
+          <section className="club-overview-copy"><span className="eyebrow">THIS WEEK</span><h2>A small table for good conversation.</h2><p>Read at your own pace, bring a question, and make room for different perspectives. New members can join when a seat opens.</p>
+            <div className="club-next-meeting"><CalendarDays size={19} /><div><strong>Next gathering</strong><span>Sunday · 6:30 PM · 45 minutes</span></div><button className="text-button" onClick={() => toast('Meeting added to your reading calendar')}>Add reminder</button></div>
+            <div className="club-activity"><span className="eyebrow">RECENT ACTIVITY</span><p><strong>Amara</strong> added a question to this week's reading.</p><p><strong>Paps</strong> finished the first section.</p></div>
+          </section>
+          <ClubGuide clubs={[club]} />
+        </div>
+      )}
+
+      {tab === 'Discussion' && (
+        <section className="club-discussion">
+          <div className="club-section-heading"><div><span className="eyebrow">THE CONVERSATION</span><h2>Leave room for a new thought.</h2></div><span className="club-live-count"><span /> {memberNames.length} readers</span></div>
+          <form className="club-compose" onSubmit={postMessage}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Share a passage, question, or reflection..." maxLength={700} aria-label="Write to the club discussion" /><div><span>{message.length}/700</span><button className="primary-button" disabled={!message.trim()}><Send size={15} /> Post reflection</button></div></form>
+          <div className="club-discussion-list">{posts.map((post, index) => <article className="club-discussion-post" key={`${post.author}-${post.time}-${index}`}><span className="avatar small">{post.author.charAt(0)}</span><div className="club-post-content"><div><strong>{post.author}</strong><time>{post.time}</time></div><p>{post.text}</p><button className={post.liked ? 'club-like active' : 'club-like'} onClick={() => toggleLike(index)} aria-label={`Appreciate ${post.author}'s reflection`}><Heart size={14} fill={post.liked ? 'currentColor' : 'none'} /> {post.likes}</button></div></article>)}</div>
+        </section>
+      )}
+
+      {tab === 'Reading plan' && (
+        <section className="club-reading-plan"><div className="club-section-heading"><div><span className="eyebrow">READING TOGETHER</span><h2>A gentle pace, one week at a time.</h2></div><span className="club-plan-status">WEEK 1 OF 4</span></div>
+          {['Begin with the opening pages', 'Notice what changes', 'Bring one question', 'Gather and reflect'].map((week, index) => <article className={`reading-week ${index === 0 ? 'current' : ''}`} key={week}><span>{String(index + 1).padStart(2, '0')}</span><div><strong>{week}</strong><small>{index === 0 ? 'This week · pages 1–48' : `Week ${index + 1} · Coming up`}</small></div><span className="week-state">{index === 0 ? 'IN PROGRESS' : 'UP NEXT'}</span></article>)}
+        </section>
+      )}
+
+      {tab === 'Members' && (
+        <section className="club-members"><div className="club-section-heading"><div><span className="eyebrow">YOUR READING CIRCLE</span><h2>People around the table.</h2></div><span className="club-live-count"><span /> {memberNames.length} members</span></div>
+          <div className="club-member-grid">{memberNames.map((name, index) => <article className="club-member" key={name}><span className={`avatar member-avatar member-color-${index}`}>{name.charAt(0)}</span><div><strong>{name}</strong><small>{index === 0 ? 'Host' : index === 2 ? 'You' : 'Reader'}</small></div><button className="icon-button" aria-label={`Message ${name}`} onClick={() => { setTab('Discussion'); setMessage(`@${name} `) }}><MessageCircle size={16} /></button></article>)}</div>
+        </section>
+      )}
     </section>
   )
 }
@@ -1354,7 +1575,7 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
   )
 }
 
-function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs = defaultClubs, onRead }) {
+function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs = defaultClubs, author = 'Reader', onRead }) {
   const toast = useContext(ToastContext)
   const [tab, setTab] = useState('Reader')
   const [playing, setPlaying] = useState(false)
@@ -1480,8 +1701,8 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
            {sent && <div className="note-sent" role="status">Your note is now in the discovery feed.</div>}
            {notes.map((item) => (
              <div className="note-card" key={item.createdAt}>
-               <span className="avatar small">M</span>
-               <div><strong>Mighty</strong><p>{item.content}</p><span>Just now</span></div>
+               <span className="avatar small">{author.charAt(0).toUpperCase()}</span>
+               <div><strong>{author}</strong><p>{item.content}</p><span>Just now</span></div>
              </div>
            ))}
            <div className="note-card">
@@ -1507,56 +1728,55 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
   )
 }
 
-function WriterDashboard({ stories = [], author, onEdit }) {
+function WriterDashboard({ stories = [], books = [], author, readingGoal, setReadingGoal, readingSessions = [], setReadingSessions, onWrite, onEdit }) {
   const myStories = stories.filter((story) => story.author === author)
-  const stats = { views: 0, subscribers: 0, stories: myStories.length }
+  const [selectedBook, setSelectedBook] = useState(books[0]?.title || '')
+  const now = new Date()
+  const monday = new Date(now)
+  monday.setHours(0, 0, 0, 0)
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday)
+    date.setDate(monday.getDate() + index)
+    return {
+      date,
+      count: readingSessions.filter((session) => new Date(session.date).toDateString() === date.toDateString()).length,
+    }
+  })
+  const sessionsThisWeek = weekDays.reduce((total, day) => total + day.count, 0)
+  const goalProgress = Math.min(100, Math.round((sessionsThisWeek / Math.max(1, Number(readingGoal))) * 100))
+  const currentlyReading = books.filter((book) => Number(book.progress) > 0 && Number(book.progress) < 100)
+  const logSession = () => {
+    setReadingSessions((current) => [...current, { date: new Date().toISOString(), title: selectedBook || 'Reading time' }])
+  }
 
   return (
-    <div className="view">
+    <div className="view dashboard-view">
       <div className="view-heading">
-        <div>
-          <span className="eyebrow coral">WRITER'S HUB</span>
-          <h1>Your publication</h1>
-          <p>Manage your stories and grow your reading community.</p>
-        </div>
+        <div><span className="eyebrow coral">YOUR READING DESK</span><h1>A life made of pages.</h1><p>Your reading practice, stories, and next small step.</p></div>
+        <button className="primary-button" onClick={onWrite}><PenLine size={16} /> Write a story</button>
       </div>
 
-      <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '2rem' }}>
-        <div className="stat-card" style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <span className="eyebrow">TOTAL VIEWS</span>
-          <strong style={{ fontSize: '2rem', display: 'block' }}>{stats.views}</strong>
+      <section className="dashboard-goal">
+        <div className="dashboard-goal-heading"><div><span className="eyebrow">WEEKLY READING RHYTHM</span><h2>Keep a little room for reading.</h2></div><label>Goal <select value={readingGoal} onChange={(event) => setReadingGoal(Number(event.target.value))} aria-label="Weekly reading goal">{[2, 3, 4, 5, 6, 7].map((goal) => <option key={goal} value={goal}>{goal} sessions</option>)}</select></label></div>
+        <div className="dashboard-goal-layout">
+          <div className="dashboard-week-chart" aria-label={`${sessionsThisWeek} of ${readingGoal} reading sessions this week`}>
+            {weekDays.map(({ date, count }) => <div className="dashboard-day" key={date.toISOString()}><span className="dashboard-bar-track"><i className={count ? 'has-session' : ''} style={{ height: `${count ? Math.min(100, 28 + count * 24) : 8}%` }} /></span><small>{date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 1)}</small></div>)}
+          </div>
+          <div className="dashboard-goal-summary"><strong>{sessionsThisWeek}<span> / {readingGoal}</span></strong><p>reading sessions this week</p><div className="dashboard-goal-track" role="progressbar" aria-label="Weekly reading goal" aria-valuemin="0" aria-valuemax={readingGoal} aria-valuenow={sessionsThisWeek}><span style={{ width: `${goalProgress}%` }} /></div><label>Log a session<select value={selectedBook} onChange={(event) => setSelectedBook(event.target.value)} aria-label="Choose a book for your session">{books.map((book) => <option key={book.title} value={book.title}>{book.title}</option>)}</select></label><button className="text-button" onClick={logSession}><Plus size={15} /> Add a reading session</button></div>
         </div>
-        <div className="stat-card" style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <span className="eyebrow">SUBSCRIBERS</span>
-          <strong style={{ fontSize: '2rem', display: 'block' }}>{stats.subscribers}</strong>
-        </div>
-        <div className="stat-card" style={{ background: 'rgba(255,255,255,0.05)', padding: '1.5rem', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)' }}>
-          <span className="eyebrow">STORIES</span>
-          <strong style={{ fontSize: '2rem', display: 'block' }}>{stats.stories}</strong>
-        </div>
+      </section>
+
+      <div className="dashboard-stat-row">
+        <article><BookOpen size={17} /><span><strong>{currentlyReading.length}</strong><small>In progress</small></span></article>
+        <article><Bookmark size={17} /><span><strong>{books.filter((book) => book.saved).length}</strong><small>Saved for later</small></span></article>
+        <article><PenLine size={17} /><span><strong>{myStories.length}</strong><small>Published stories</small></span></article>
       </div>
 
-      <div className="stories-management">
-        <div className="section-heading">
-          <h2>Your Archive</h2>
-        </div>
-        <div className="story-list">
-          {myStories.map((story, idx) => (
-            <article className="story-row" key={idx}>
-              <span className="story-number">0{idx + 1}</span>
-              <div style={{ flex: 1 }}>
-                <h3 style={{ margin: 0 }}>{story.title}</h3>
-                <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>
-                  {story.readTime} min read · {story.views || 0} views · 
-                  <span style={{ marginLeft: '8px', color: 'coral' }}>{Math.round((story.views / 1000) * 100)}% reach</span>
-                </p>
-              </div>
-              <button className="text-button" onClick={() => onEdit?.(story)}>Edit</button>
-            </article>
-          ))}
-          {myStories.length === 0 && <p>You haven't published any stories yet.</p>}
-        </div>
-      </div>
+      <section className="dashboard-archive">
+        <div className="section-heading"><div><span className="eyebrow">YOUR WORDS</span><h2>Story archive</h2></div><button className="text-button" onClick={onWrite}><Plus size={15} /> New story</button></div>
+        {myStories.length ? <div className="story-list">{myStories.map((story, index) => <article className="story-row" key={`${story.title}-${index}`}><span className="story-number">{String(index + 1).padStart(2, '0')}</span><div style={{ flex: 1 }}><h3>{story.title}</h3><p>{story.readTime || 5} min read · {story.views || 0} reads</p></div><button className="text-button" onClick={() => onEdit?.(story)}>Edit</button></article>)}</div> : <div className="dashboard-empty"><PenLine size={19} /><div><strong>Your first story can start small.</strong><p>Write a reflection, note, or question for your reading circle.</p></div><button className="text-button" onClick={onWrite}>Start writing <ChevronRight size={15} /></button></div>}
+      </section>
     </div>
   )
 }
