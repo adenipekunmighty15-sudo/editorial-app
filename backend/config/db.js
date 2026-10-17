@@ -1,5 +1,18 @@
 const mongoose = require('mongoose');
+const dns = require('dns');
 require('dotenv').config();
+
+// Some local networks pin Node's resolver to a stub DNS that refuses SRV
+// lookups (querySrv ECONNREFUSED). Set DNS_SERVERS to override on those
+// machines; hosted environments like Render use the platform resolver.
+const dnsServers = (process.env.DNS_SERVERS || '')
+  .split(',')
+  .map((server) => server.trim())
+  .filter(Boolean);
+
+if (dnsServers.length) {
+  dns.setServers(dnsServers);
+}
 
 mongoose.set('bufferTimeoutMS', 5000);
 

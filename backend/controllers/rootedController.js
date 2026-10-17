@@ -2,32 +2,52 @@ const Book = require('../models/Book');
 const Club = require('../models/Club');
 const Story = require('../models/Story');
 
-exports.getBooks = async (req, res) => {
-  const books = await Book.find();
-  res.json(books);
-};
+const handle = (res, fn) =>
+  fn().catch((error) => {
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: Object.values(error.errors).map((e) => e.message),
+      });
+    }
+    if (error.name === 'CastError') {
+      return res.status(400).json({ error: 'Invalid value supplied' });
+    }
+    return res.status(500).json({ error: 'Server error' });
+  });
 
-exports.addBook = async (req, res) => {
-  const book = await Book.create(req.body);
-  res.status(201).json(book);
-};
+exports.getBooks = (req, res) =>
+  handle(res, async () => {
+    const books = await Book.find();
+    res.json(books);
+  });
 
-exports.getClubs = async (req, res) => {
-  const clubs = await Club.find();
-  res.json(clubs);
-};
+exports.addBook = (req, res) =>
+  handle(res, async () => {
+    const book = await Book.create(req.body);
+    res.status(201).json(book);
+  });
 
-exports.addClub = async (req, res) => {
-  const club = await Club.create(req.body);
-  res.status(201).json(club);
-};
+exports.getClubs = (req, res) =>
+  handle(res, async () => {
+    const clubs = await Club.find();
+    res.json(clubs);
+  });
 
-exports.getStories = async (req, res) => {
-  const stories = await Story.find();
-  res.json(stories);
-};
+exports.addClub = (req, res) =>
+  handle(res, async () => {
+    const club = await Club.create(req.body);
+    res.status(201).json(club);
+  });
 
-exports.addStory = async (req, res) => {
-  const story = await Story.create(req.body);
-  res.status(201).json(story);
-};
+exports.getStories = (req, res) =>
+  handle(res, async () => {
+    const stories = await Story.find();
+    res.json(stories);
+  });
+
+exports.addStory = (req, res) =>
+  handle(res, async () => {
+    const story = await Story.create(req.body);
+    res.status(201).json(story);
+  });
