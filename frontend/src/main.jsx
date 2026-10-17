@@ -1,12 +1,14 @@
-import { StrictMode, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { StrictMode, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Bookmark, BookOpen, Check, ChevronRight, FileText, Flame, Heart, Home, Library, Menu, PenLine, Plus, Search, Send, Sparkles, Users, WandSparkles, X } from 'lucide-react'
+import { Bookmark, BookOpen, Check, ChevronRight, Eye, EyeOff, FileText, Flame, Heart, Home, Library, Menu, PenLine, Plus, Search, Send, Sparkles, Users, WandSparkles, X } from 'lucide-react'
 import { gsap } from 'gsap'
 import * as THREE from 'three'
 import { ai, api } from './api'
 import { AIRecommendations, ClubGuide, GenreOrganizer, RootedChat } from './AIWidgets'
 import Book3D from './Book3D'
 import './styles.css'
+
+const ToastContext = createContext(() => {})
 
 const defaultBooks = [
   { title: 'The Practice of Presence', author: 'John Mark Comer', tag: 'SPIRITUAL FORMATION', image: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=500&q=80', progress: 68, color: 'terracotta' },
@@ -35,21 +37,219 @@ const verses = [
   { text: '“Grace be with you all.”', ref: 'Galatians 6:18' },
 ]
 
+function QuoteCard() {
+  const quotes = [
+    { text: '“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”', author: 'Will Durant' },
+    { text: '“He who has a why to live can bear almost any how.”', author: 'Friedrich Nietzsche' },
+    { text: '“Truth is not a destination, but a way of traveling.”', author: 'Unknown' },
+  ]
+  const [index, setIndex] = useState(0)
+
+  useEffect(() => {
+    const timer = setInterval(() => setIndex((current) => (current + 1) % quotes.length), 5000)
+    return () => clearInterval(timer)
+  }, [quotes.length])
+
+  return (
+    <>
+      <Sparkles size={19} />
+      <p>{quotes[index].text}</p>
+      <span>— {quotes[index].author}</span>
+      <div className="quote-dots" aria-label={`Quote ${index + 1} of ${quotes.length}`}>
+        {quotes.map((quote, quoteIndex) => (
+          <i key={quote.author} className={quoteIndex === index ? 'selected' : ''} />
+        ))}
+      </div>
+    </>
+  )
+}
+
+function useStoredState(key, initialValue) {
+  const [value, setValue] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key)
+      return stored ? JSON.parse(stored) : initialValue
+    } catch {
+      return initialValue
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(value))
+    } catch {
+      // Storage can be unavailable in private browsing contexts.
+    }
+  }, [key, value])
+
+  return [value, setValue]
+}
+
+async function hashPassword(password, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveBits'])
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 120000, hash: 'SHA-256' }, key, 256)
+  return Array.from(new Uint8Array(bits), (byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function EntryFlow({ onEnter }) {
+  const [mode, setMode] = useState('welcome')
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [showPassword, setShowPassword] = useState(false)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const switchMode = (nextMode) => {
+    setMode(nextMode)
+    setError('')
+    setPassword('')
+    setConfirmPassword('')
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    setError('')
+    const normalizedEmail = email.trim().toLowerCase()
+    if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError('Enter a valid email address.')
+      return
+    }
+    if (mode === 'reset') {
+      if (password.length < 8) {
+        setError('Use at least 8 characters for your password.')
+        return
+      }
+      if (password !== confirmPassword) {
+        setError('Those passwords do not match.')
+        return
+      }
+      const savedAccount = JSON.parse(localStorage.getItem('rooted.local-account') || 'null')
+      if (!savedAccount || savedAccount.email !== normalizedEmail) {
+        setError('No Rooted account was found for that email on this device.')
+        return
+      }
+      const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+      savedAccount.salt = salt
+      savedAccount.passwordHash = await hashPassword(password, salt)
+      localStorage.setItem('rooted.local-account', JSON.stringify(savedAccount))
+      switchMode('sign-in')
+      setError('Password updated. Sign in to continue.')
+      return
+    }
+
+    if (password.length < 8) {
+      setError('Use at least 8 characters for your password.')
+      return
+    }
+    setBusy(true)
+    try {
+      const savedAccount = JSON.parse(localStorage.getItem('rooted.local-account') || 'null')
+      if (mode === 'create') {
+        if (!name.trim()) {
+          setError('Add your name to create an account.')
+          return
+        }
+        if (password !== confirmPassword) {
+          setError('Those passwords do not match.')
+          return
+        }
+        if (savedAccount?.email === normalizedEmail) {
+          setError('An account already exists on this device. Sign in instead.')
+          return
+        }
+        const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), (byte) => byte.toString(16).padStart(2, '0')).join('')
+        const account = { name: name.trim(), email: normalizedEmail, salt, passwordHash: await hashPassword(password, salt) }
+        localStorage.setItem('rooted.local-account', JSON.stringify(account))
+        onEnter({ name: account.name, email: account.email })
+        return
+      }
+      if (!savedAccount || savedAccount.email !== normalizedEmail || await hashPassword(password, savedAccount.salt) !== savedAccount.passwordHash) {
+        setError('Email or password is incorrect on this device.')
+        return
+      }
+      onEnter({ name: savedAccount.name, email: savedAccount.email })
+    } catch {
+      setError('Secure account storage is unavailable in this browser.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  if (mode === 'welcome') {
+    return (
+      <main className="entry-screen welcome-screen">
+        <section className="entry-copy">
+          <button className="entry-brand" onClick={() => switchMode('welcome')}><span className="brand-mark">R</span> ROOTED</button>
+          <span className="eyebrow coral">READ DEEPLY · LIVE FULLY</span>
+          <h1>A quieter place<br /><em>to find your next page.</em></h1>
+          <p>Build a reading life with thoughtful books, honest stories, and people who make room for conversation.</p>
+          <div className="entry-actions">
+            <button className="primary-button" onClick={() => switchMode('create')}>Create your account <ChevronRight size={17} /></button>
+            <button className="entry-secondary" onClick={() => switchMode('sign-in')}>Sign in</button>
+          </div>
+          <button className="guest-link" onClick={() => onEnter({ name: 'Guest Reader', email: '' })}>Explore as a guest</button>
+          <span className="entry-privacy">Preview accounts stay on this device.</span>
+        </section>
+        <div className="entry-image" role="img" aria-label="A warm, quiet library lined with books" />
+      </main>
+    )
+  }
+
+  return (
+    <main className="entry-screen auth-screen">
+      <div className="auth-image" />
+      <section className="auth-panel">
+        <button className="entry-brand" onClick={() => switchMode('welcome')}><span className="brand-mark">R</span> ROOTED</button>
+        <button className="text-button auth-back" onClick={() => switchMode('welcome')}><ChevronRight className="back-chevron" size={16} /> Back</button>
+        <span className="eyebrow coral">{mode === 'create' ? 'MAKE YOURSELF AT HOME' : mode === 'reset' ? 'ACCOUNT ACCESS' : 'WELCOME BACK'}</span>
+        <h1>{mode === 'create' ? 'Create your account.' : mode === 'reset' ? 'Choose a new password.' : 'Sign in to Rooted.'}</h1>
+        <p className="auth-intro">{mode === 'create' ? 'A reading life is better when it has a place to grow.' : mode === 'reset' ? 'Reset the password for your account on this device.' : 'Your books, stories, and reading circle are waiting.'}</p>
+        <form className="auth-form" onSubmit={handleSubmit}>
+          {mode === 'create' && <label>Your name<input autoComplete="name" value={name} onChange={(event) => setName(event.target.value)} required /></label>}
+          <label>Email address<input type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} required /></label>
+          {mode !== 'reset' && <label>Password<span className="password-field"><input type={showPassword ? 'text' : 'password'} autoComplete={mode === 'create' ? 'new-password' : 'current-password'} value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>}
+          {mode === 'reset' && <label>New password<span className="password-field"><input type={showPassword ? 'text' : 'password'} autoComplete="new-password" value={password} onChange={(event) => setPassword(event.target.value)} minLength={8} required /><button type="button" aria-label={showPassword ? 'Hide password' : 'Show password'} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={17} /> : <Eye size={17} />}</button></span></label>}
+          {(mode === 'create' || mode === 'reset') && <label>Confirm password<input type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} minLength={8} required /></label>}
+          {mode === 'sign-in' && <button type="button" className="forgot-link" onClick={() => switchMode('reset')}>Forgot password?</button>}
+          {error && <p className="auth-error" role="alert">{error}</p>}
+          <button className="primary-button auth-submit" type="submit" disabled={busy}>{busy ? 'Please wait...' : mode === 'create' ? 'Create account' : mode === 'reset' ? 'Update password' : 'Sign in'} <ChevronRight size={17} /></button>
+        </form>
+        <p className="auth-switch">{mode === 'create' ? 'Already have an account?' : mode === 'reset' ? 'Remember your password?' : 'New to Rooted?'} <button onClick={() => switchMode(mode === 'create' ? 'sign-in' : 'create')}>{mode === 'create' || mode === 'reset' ? 'Sign in' : 'Create account'}</button></p>
+        <p className="entry-privacy">Accounts in this preview are stored on this device.</p>
+      </section>
+    </main>
+  )
+}
+
 function App() {
+  const [session, setSession] = useStoredState('rooted.session', null)
   const [active, setActive] = useState('Home')
   const [writerOpen, setWriterOpen] = useState(false)
+  const [editingStory, setEditingStory] = useState(null)
   const [readingStory, setReadingStory] = useState(null)
   const [selectedClub, setSelectedClub] = useState(null)
+  const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
-  const [books, setBooks] = useState(defaultBooks)
-  const [clubs, setClubs] = useState(defaultClubs)
-  const [stories, setStories] = useState(defaultStories)
+  const [books, setBooks] = useStoredState('rooted.books', defaultBooks)
+  const [clubs, setClubs] = useStoredState('rooted.clubs', defaultClubs)
+  const [stories, setStories] = useStoredState('rooted.stories', defaultStories)
+  const [joinedClubs, setJoinedClubs] = useStoredState('rooted.joined-clubs', [])
+  const [previewBook, setPreviewBook] = useState(defaultBooks[0])
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [theme, setTheme] = useState('light')
-  const [notifications, setNotifications] = useState(true)
+  const [theme, setTheme] = useStoredState('rooted.theme', 'light')
+  const [notifications, setNotifications] = useStoredState('rooted.notifications', true)
+  const toast = (message) => setNotice(message)
+
+  useEffect(() => {
+    if (!notice) return undefined
+    const timer = window.setTimeout(() => setNotice(''), 2800)
+    return () => window.clearTimeout(timer)
+  }, [notice])
 
   useEffect(() => {
     let cancelled = false
@@ -74,32 +274,21 @@ function App() {
     }
   }, [])
 
-  const handleSaveBook = async (title) => {
-    try {
-      await api.toggleBookSave(title)
-      setBooks(current => current.map(b => b.title === title ? { ...b, saved: !b.saved } : b))
-      toast('Library updated')
-    } catch (e) {
-      toast('Failed to save book')
-    }
+  if (!session) return <EntryFlow onEnter={setSession} />
+
+  const handleSaveBook = (title) => {
+    setBooks((current) => current.map((book) => book.title === title ? { ...book, saved: !book.saved } : book))
+    toast('Library updated')
   }
 
-  const handleUpdateProgress = async (title, progress) => {
-    try {
-      await api.updateBookProgress(title, progress)
-      setBooks(current => current.map(b => b.title === title ? { ...b, progress } : b))
-    } catch (e) {
-      // Silent fail for slider to prevent toast spam
-    }
+  const handleUpdateProgress = (title, progress) => {
+    setBooks((current) => current.map((book) => book.title === title ? { ...book, progress } : book))
   }
 
-  const handleJoinClub = async (title) => {
-    try {
-      await api.joinClub(title)
-      toast(`Request sent to ${title}`)
-    } catch (e) {
-      toast('Failed to join club')
-    }
+  const handleJoinClub = (title) => {
+    if (joinedClubs.includes(title)) return
+    setJoinedClubs((current) => [...current, title])
+    toast(`Request sent to ${title}`)
   }
 
   const navItems = [
@@ -112,18 +301,26 @@ function App() {
     { label: 'Dashboard', icon: FileText },
   ]
 
+  const navigateTo = (label) => {
+    setActive(label)
+    setReadingStory(null)
+    setSelectedClub(null)
+    setSelectedAuthor(null)
+    setMenuOpen(false)
+  }
+
   const dailyVerse = verses[new Date().getDate() % verses.length]
 
   const handleSearch = (q) => {
     if (!q.trim()) return
-    setActive('Library')
-    toast(`Searching for "${q}"...`)
+    navigateTo('Library')
   }
 
   return (
-    <div className="app-shell">
+    <ToastContext.Provider value={toast}>
+    <div className={`app-shell ${theme === 'dark' ? 'theme-dark' : ''}`}>
       <header className="topbar">
-        <button className="brand" onClick={() => setActive('Home')}>
+        <button className="brand" onClick={() => navigateTo('Home')}>
           <span className="brand-mark">R</span>
           <span>ROOTED</span>
         </button>
@@ -153,8 +350,7 @@ function App() {
                key={label}
                className={active === label ? 'nav-item active' : 'nav-item'}
                onClick={() => {
-                 setActive(label)
-                 setMenuOpen(false)
+                 navigateTo(label)
                }}
              >
                <Icon size={18} />
@@ -182,7 +378,7 @@ function App() {
             <div className="profile-content">
               <div className="profile-header">
                 <div className="avatar large">M</div>
-                <h2>Mighty</h2>
+                <h2>{session.name}</h2>
                 <p>Dedicated Reader & Writer</p>
               </div>
               <div className="profile-stats">
@@ -193,6 +389,7 @@ function App() {
               <button className="primary-button" style={{ width: '100%', marginTop: '2rem' }} onClick={() => setProfileOpen(false)}>
                 Close Profile
               </button>
+              <button className="text-button" style={{ margin: '1rem auto 0' }} onClick={() => { setProfileOpen(false); setSession(null) }}>Sign out</button>
             </div>
           </div>
         </div>
@@ -266,7 +463,7 @@ function App() {
               <button
                 key={label}
                 className={active === label ? 'nav-item active' : 'nav-item'}
-                onClick={() => setActive(label)}
+                onClick={() => navigateTo(label)}
               >
                 <Icon size={18} />
                 {label}
@@ -296,12 +493,20 @@ function App() {
 
         <main className="main-content">
           {readingStory && (
-            <StoryReader story={readingStory} onBack={() => setReadingStory(null)} />
+            <StoryReader story={readingStory} onBack={() => setReadingStory(null)} onAuthor={(author) => { setReadingStory(null); setSelectedAuthor(author) }} />
           )}
           {selectedClub && (
-            <ClubProfile club={selectedClub} onBack={() => setSelectedClub(null)} />
+            <ClubProfile
+              club={selectedClub}
+              onBack={() => setSelectedClub(null)}
+              onJoin={() => handleJoinClub(selectedClub.title)}
+              joined={joinedClubs.includes(selectedClub.title)}
+            />
           )}
-          {!readingStory && !selectedClub && (
+          {selectedAuthor && (
+            <AuthorPublicationPage author={selectedAuthor} stories={stories} onBack={() => setSelectedAuthor(null)} onRead={(story) => { setSelectedAuthor(null); setReadingStory(story) }} />
+          )}
+          {!readingStory && !selectedClub && !selectedAuthor && (
             <>
               {active === 'Home' && (
                 <>
@@ -315,7 +520,7 @@ function App() {
                       <p>
                         A thoughtful place for Christian books, honest stories, and the people reading alongside you.
                       </p>
-                      <button className="primary-button" onClick={() => setActive('Library')}>
+                      <button className="primary-button" onClick={() => navigateTo('Library')}>
                         Explore the library <ChevronRight size={17} />
                       </button>
                     </div>
@@ -328,14 +533,14 @@ function App() {
                       </div>
                     </div>
                   </section>
- 
+  
                   <section className="section-block">
                     <div className="section-heading">
                       <div>
                         <span className="eyebrow">CONTINUE READING</span>
                         <h2>Pick up where you left off</h2>
                       </div>
-                      <button className="text-button" onClick={() => setActive('Library')}>
+                      <button className="text-button" onClick={() => navigateTo('Library')}>
                         View library <ChevronRight size={16} />
                       </button>
                     </div>
@@ -347,10 +552,7 @@ function App() {
                           book={book}
                           onSave={() => handleSaveBook(book.title)}
                           onUpdateProgress={handleUpdateProgress}
-                          onOpen={() => {
-                            setActive('Preview')
-                            // Logic to auto-open the book in Book3D would go here
-                          }}
+                          onOpen={(selected) => { setPreviewBook(selected); navigateTo('Preview') }}
                         />
                       ))}
                     </div>
@@ -363,7 +565,7 @@ function App() {
                           <span className="eyebrow">READING TOGETHER</span>
                           <h2>Find your people</h2>
                         </div>
-                        <button className="text-button" onClick={() => setActive('Book clubs')}>
+                        <button className="text-button" onClick={() => navigateTo('Book clubs')}>
                           All clubs <ChevronRight size={16} />
                         </button>
                       </div>
@@ -375,40 +577,15 @@ function App() {
                             club={club}
                             onJoin={() => handleJoinClub(club.title)}
                             onOpen={setSelectedClub}
+                            joined={joinedClubs.includes(club.title)}
                           />
                         ))}
                       </div>
                     </div>
  
-function QuoteCard() {
-  const quotes = [
-    { text: '“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”', author: 'Will Durant' },
-    { text: '“The only way to deal with an unfree world is to become so absolutely free that your very existence is an act of rebellion.”', author: 'Albert Camus' },
-    { text: '“He who has a why to live can bear almost any how.”', author: 'Friedrich Nietzsche' },
-    { text: '“Truth is not a destination, but a way of traveling.”', author: 'Unknown' },
-  ]
-  const [index, setIndex] = useState(0)
- 
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setIndex(prev => (prev + 1) % quotes.length)
-    }, 5000)
-    return () => clearInterval(timer)
-  }, [])
- 
-  return (
-    <aside className="quote-card">
-      <Sparkles size={19} />
-      <p>{quotes[index].text}</p>
-      <span>— {quotes[index].author}</span>
-      <div className="quote-dots">
-        {quotes.map((_, i) => (
-          <i key={i} className={i === index ? 'selected' : ''} />
-        ))}
-      </div>
-    </aside>
-  )
-}
+                    <aside className="quote-card">
+                      <QuoteCard />
+                    </aside>
                   </section>
                 </>
               )}
@@ -418,49 +595,52 @@ function QuoteCard() {
                   books={books} 
                   onSave={(title) => handleSaveBook(title)} 
                   onUpdateProgress={handleUpdateProgress}
-                  onOpen={(book) => {
-                    setActive('Preview')
-                    // Logic to auto-open the book in Book3D
-                  }}
+                  searchQuery={query}
+                  onSuggest={(book) => setBooks((current) => [book, ...current])}
+                  onOpen={(book) => { setPreviewBook(book); navigateTo('Preview') }}
                 />
               )}
               {active === 'Book clubs' && (
-                <ClubsView clubs={clubs} onJoin={handleJoinClub} />
+                <ClubsView
+                  clubs={clubs}
+                  onJoin={handleJoinClub}
+                  joinedClubs={joinedClubs}
+                  onCreate={(club) => setClubs((current) => [club, ...current])}
+                  onOpen={setSelectedClub}
+                />
               )}
               {active === 'Stories' && (
-                <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => setWriterOpen(true)} onRead={setReadingStory} />
+                <StoriesView books={books} clubs={clubs} stories={stories} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onRead={setReadingStory} onAuthor={setSelectedAuthor} />
               )}
-              {active === 'Discover' && <DiscoveryFeed />}
-              {active === 'Preview' && <BookPreview books={books} />}
-              {active === 'Dashboard' && <WriterDashboard />}
+              {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} onRead={setReadingStory} />}
+              {active === 'Preview' && <BookPreview books={books} book={previewBook} onSelect={setPreviewBook} />}
+              {active === 'Dashboard' && <WriterDashboard stories={stories} author={session.name} onEdit={(story) => { setEditingStory(story); setWriterOpen(true) }} />}
             </>
           )}
-        </main>
         </main>
       </div>
 
       {writerOpen && (
         <WriterModal
-          onClose={() => setWriterOpen(false)}
+          initialStory={editingStory}
+          onClose={() => { setWriterOpen(false); setEditingStory(null) }}
           onAssist={(input) => ai.write(input)}
-          onPublish={async ({ title, body }) => {
+          onPublish={({ title, body }) => {
             setWriterOpen(false)
+            const currentStory = editingStory
+            setEditingStory(null)
             const readTime = Math.max(1, Math.round(body.split(/\s+/).length / 200))
             const story = {
               title: title || 'Untitled story',
-              author: 'Mighty',
+              author: session.name,
               content: body,
               excerpt: body.slice(0, 140),
               readTime,
             }
-            try {
-              const saved = await api.addStory(story)
-              setStories((current) => [saved, ...current])
-              toast('Your story has been published')
-            } catch {
-              setStories((current) => [{ ...story, likes: 0 }, ...current])
-              toast('Saved locally — backend unavailable')
-            }
+            setStories((current) => currentStory
+              ? current.map((item) => item.title === currentStory.title ? { ...item, ...story } : item)
+              : [{ ...story, likes: 0 }, ...current])
+            toast(currentStory ? 'Story updated' : 'Story published')
           }}
         />
       )}
@@ -472,6 +652,7 @@ function QuoteCard() {
         </div>
       )}
     </div>
+    </ToastContext.Provider>
   )
 }
 
@@ -574,13 +755,7 @@ function HeroBook3D() {
 }
 
 function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
-  const [progress, setProgress] = useState(book.progress)
-
-  const handleProgressChange = (e) => {
-    const newProg = Number(e.target.value)
-    setProgress(newProg)
-    onUpdateProgress?.(book.title, newProg)
-  }
+  const progress = Math.min(100, Math.max(0, Number(book.progress) || 0))
 
   return (
     <article className="book-card" onClick={() => onOpen?.(book)}>
@@ -602,14 +777,9 @@ function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
         <h3>{book.title}</h3>
         <p>{book.author}</p>
         <div className="progress-row">
-          <input 
-            type="range" 
-            min="0" 
-            max="100" 
-            value={progress} 
-            onChange={handleProgressChange}
-            className="progress-slider"
-          />
+          <div className="progress" role="progressbar" aria-label={`${book.title} reading progress`} aria-valuemin="0" aria-valuemax="100" aria-valuenow={progress}>
+            <span style={{ width: `${progress}%` }} />
+          </div>
           <small>{progress}%</small>
         </div>
       </div>
@@ -617,7 +787,7 @@ function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
   )
 }
 
-function ClubCard({ club, onJoin, onOpen }) {
+function ClubCard({ club, onJoin, onOpen, joined = false }) {
   return (
     <article className="club-card">
       <img src={club.image} alt="" onClick={() => onOpen?.(club)} style={{ cursor: 'pointer' }} />
@@ -633,32 +803,36 @@ function ClubCard({ club, onJoin, onOpen }) {
           <span>{club.time}</span>
         </div>
       </div>
-      <button className="join-button" onClick={onJoin}>Join</button>
+      <button className="join-button" onClick={onJoin} disabled={joined}>{joined ? 'Requested' : 'Join'}</button>
     </article>
   )
 }
-
-function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen, onSuggest }) {
+  function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen, onSuggest, searchQuery = '' }) {
+  const toast = useContext(ToastContext)
   const [filter, setFilter] = useState('For you')
+    const [shelf, setShelf] = useState('All books')
+    const [sortBy, setSortBy] = useState('Featured')
   const [suggestOpen, setSuggestOpen] = useState(false)
   const [suggestion, setSuggestion] = useState({ title: '', author: '', reason: '' })
 
-  const handleSuggest = async () => {
-    try {
-      await api.addBook(suggestion)
-      setSuggestOpen(false)
-      setSuggestion({ title: '', author: '', reason: '' })
-      toast('Recommendation sent!')
-    } catch (e) {
-      toast('Failed to suggest book')
+  const handleSuggest = () => {
+    const title = suggestion.title.trim()
+    const author = suggestion.author.trim()
+    if (!title || !author) {
+      toast('Add a title and author')
+      return
     }
+    onSuggest?.({ ...suggestion, title, author, image: defaultBooks[0].image, tag: 'RECOMMENDED', color: 'sage', progress: 0 })
+    setSuggestOpen(false)
+    setSuggestion({ title: '', author: '', reason: '' })
+    toast('Book added to the library')
   }
  
   const catalog = books.concat([
-    { ...books[0], title: 'The Cost of Discipleship', author: 'Dietrich Bonhoeffer', color: 'ochre', progress: 0, tag: 'NON-FICTION' },
+    { ...books[0], title: 'The Cost of Discipleship', author: 'Dietrich Bonhoeffer', color: 'ochre', progress: 0, saved: false, tag: 'NON-FICTION' },
   ])
  
-  const filtered =
+  const byFilter =
     filter === 'For you'
       ? catalog
       : catalog.filter((book) => {
@@ -668,6 +842,20 @@ function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen, o
           if (filter === 'Spiritual formation') return ['SPIRITUAL FORMATION', 'FORMATION'].includes(tag)
           return true
         })
+  const byShelf = byFilter.filter((book) => {
+    if (shelf === 'Reading') return Number(book.progress) > 0 && Number(book.progress) < 100
+    if (shelf === 'Saved') return Boolean(book.saved)
+    return true
+  })
+  const normalizedQuery = searchQuery.trim().toLowerCase()
+  const filtered = byShelf.filter((book) => {
+    if (!normalizedQuery) return true
+    return [book.title, book.author, book.tag].some((value) => value?.toLowerCase().includes(normalizedQuery))
+  }).sort((first, second) => {
+    if (sortBy === 'Title A-Z') return first.title.localeCompare(second.title)
+    if (sortBy === 'Progress') return (second.progress || 0) - (first.progress || 0)
+    return 0
+  })
  
   return (
     <div className="view">
@@ -685,6 +873,25 @@ function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen, o
           Suggest a book
         </button>
       </div>
+
+      <div className="library-toolbar">
+        <div className="shelf-tabs" role="tablist" aria-label="Library shelves">
+          {['All books', 'Reading', 'Saved'].map((item) => (
+            <button key={item} role="tab" aria-selected={shelf === item} className={shelf === item ? 'shelf-tab active' : 'shelf-tab'} onClick={() => setShelf(item)}>
+              {item}{item === 'Saved' ? ` · ${books.filter((book) => book.saved).length}` : ''}
+            </button>
+          ))}
+        </div>
+        <label className="sort-control">Sort
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value)} aria-label="Sort books">
+            <option>Featured</option>
+            <option>Title A-Z</option>
+            <option>Progress</option>
+          </select>
+        </label>
+      </div>
+
+      <p className="library-result-count" aria-live="polite">{filtered.length} {filtered.length === 1 ? 'book' : 'books'}{normalizedQuery ? ` matching “${searchQuery.trim()}”` : ''}</p>
  
       <div className="filter-row">
         {['For you', 'Fiction', 'Non-fiction', 'Spiritual formation'].map((item) => (
@@ -764,20 +971,22 @@ function LibraryView({ books = defaultBooks, onSave, onUpdateProgress, onOpen, o
   )
 }
 
-function ClubsView({ clubs = defaultClubs, onJoin }) {
+function ClubsView({ clubs = defaultClubs, onJoin, joinedClubs = [], onCreate, onOpen }) {
+  const toast = useContext(ToastContext)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newClub, setNewClub] = useState({ title: '', book: '' })
 
-  const handleCreateClub = async () => {
-    try {
-      await api.addClub(newClub)
-      setShowCreateModal(false)
-      setNewClub({ title: '', book: '' })
-      // Note: in a real app we'd refresh the clubs list from API
-      window.location.reload() 
-    } catch (e) {
-      alert('Failed to create club')
+  const handleCreateClub = () => {
+    const title = newClub.title.trim()
+    const book = newClub.book.trim()
+    if (!title || !book) {
+      toast('Add a club name and book')
+      return
     }
+    onCreate?.({ ...newClub, title, book, members: '1 / 5', time: 'just started', image: defaultClubs[0].image })
+    setShowCreateModal(false)
+    setNewClub({ title: '', book: '' })
+    toast('Your reading club is ready')
   }
 
   const catalog = clubs.concat([
@@ -800,7 +1009,7 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
  
       <div className="club-list wide">
         {catalog.map((club, index) => (
-          <ClubCard key={`${club.title}-${index}`} club={club} onJoin={onJoin} />
+          <ClubCard key={`${club.title}-${index}`} club={club} onJoin={() => onJoin(club.title)} onOpen={onOpen} joined={joinedClubs.includes(club.title)} />
         ))}
       </div>
  
@@ -849,33 +1058,24 @@ function ClubsView({ clubs = defaultClubs, onJoin }) {
   )
 }
 
-function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite, onRead }) {
-  const [storyLikes, setStoryLikes] = useState({})
-  const [subscribedAuthors, setSubscribedAuthors] = useState([])
+function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = defaultStories, onWrite, onRead, onAuthor }) {
+  const toast = useContext(ToastContext)
+  const [storyLikes, setStoryLikes] = useStoredState('rooted.story-likes', {})
+  const [subscribedAuthors, setSubscribedAuthors] = useStoredState('rooted.subscribed-authors', [])
 
-  const handleLike = async (title) => {
-    try {
-      await api.likeStory(title)
-      setStoryLikes(prev => ({
-        ...prev,
-        [title]: { 
-          liked: !prev[title]?.liked, 
-          count: prev[title]?.liked ? (stories.find(s => s.title === title)?.likes - 1 || 0) : (stories.find(s => s.title === title)?.likes + 1 || 1) 
-        }
-      }))
-    } catch (e) {
-      toast('Failed to like story')
-    }
+  const handleLike = (title) => {
+    const story = stories.find((item) => item.title === title)
+    setStoryLikes((current) => {
+      const liked = Boolean(current[title]?.liked)
+      const count = current[title]?.count ?? story?.likes ?? 0
+      return { ...current, [title]: { liked: !liked, count: Math.max(0, count + (liked ? -1 : 1)) } }
+    })
   }
 
-  const handleSubscribe = async (author) => {
-    try {
-      await api.subscribeToAuthor(author)
-      setSubscribedAuthors(prev => [...prev, author])
-      toast(`Subscribed to ${author}!`)
-    } catch (e) {
-      toast('Failed to subscribe')
-    }
+  const handleSubscribe = (author) => {
+    if (subscribedAuthors.includes(author)) return
+    setSubscribedAuthors((current) => [...current, author])
+    toast(`Subscribed to ${author}`)
   }
 
   return (
@@ -899,12 +1099,12 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
           </div>
           <div>
             <span className="eyebrow">FEATURED STORY · 8 MIN READ</span>
-            <h2 onClick={() => onRead({ title: 'The grace of beginning again', author: 'Amara Okafor', content: '...' })} style={{ cursor: 'pointer' }}>The grace of beginning again</h2>
+            <h2 onClick={() => onRead(stories.find((story) => story.title === 'The grace of beginning again') || { title: 'The grace of beginning again', author: 'Amara Okafor', excerpt: 'Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.' })} style={{ cursor: 'pointer' }}>The grace of beginning again</h2>
             <p>“Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.”</p>
             <div className="story-author">
               <span className="avatar small">A</span>
               <span>
-                <strong>Amara Okafor</strong>
+                <button className="author-link" onClick={() => onAuthor?.('Amara Okafor')}>Amara Okafor</button>
                 <small>3 days ago · 14 responses</small>
               </span>
             </div>
@@ -912,8 +1112,9 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
               className="primary-button" 
               style={{ marginTop: '1rem', fontSize: '0.8rem' }} 
               onClick={() => handleSubscribe('Amara Okafor')}
+              disabled={subscribedAuthors.includes('Amara Okafor')}
             >
-              Subscribe to Author
+              {subscribedAuthors.includes('Amara Okafor') ? 'Subscribed' : 'Subscribe to Author'}
             </button>
           </div>
         </div>
@@ -928,36 +1129,127 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
               <span className="story-number">0{index + 1}</span>
               <div style={{ cursor: 'pointer' }} onClick={() => onRead(story)}>
                 <h3>{story.title}</h3>
-                <p>{story.author} · {story.readTime || index + 4} min read</p>
+                <p><button className="author-link" onClick={(event) => { event.stopPropagation(); onAuthor?.(story.author) }}>{story.author}</button> · {story.readTime || index + 4} min read</p>
                 <button 
                   className="text-button" 
                   style={{ padding: 0, fontSize: '0.7rem', color: 'coral' }} 
                   onClick={(e) => { e.stopPropagation(); handleSubscribe(story.author); }}
+                  disabled={subscribedAuthors.includes(story.author)}
                 >
-                  + Subscribe to {story.author}
+                  {subscribedAuthors.includes(story.author) ? 'Subscribed' : `+ Subscribe to ${story.author}`}
                 </button>
               </div>
               <button 
                 onClick={() => handleLike(story.title)} 
                 className={`like-button ${storyLikes[story.title]?.liked ? 'active' : ''}`}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: storyLikes[story.title]?.liked ? 'red' : 'inherit' }}
+                aria-label={`${storyLikes[story.title]?.liked ? 'Unlike' : 'Like'} ${story.title}`}
               >
                 <Heart size={18} fill={storyLikes[story.title]?.liked ? 'currentColor' : 'none'} />
+                <span>{storyLikes[story.title]?.count ?? story.likes ?? 0}</span>
               </button>
             </article>
           ))}
         </div>
       </div>
  
-      <PublicationHub books={books} clubs={clubs} stories={stories} />
+      <PublicationHub books={books} clubs={clubs} stories={stories} onRead={onRead} />
       <GenreOrganizer />
     </>
   )
 }
 
-function WriterModal({ onClose, onPublish, onAssist }) {
-  const [title, setTitle] = useState('')
-  const [body, setBody] = useState('')
+function StoryReader({ story, onBack, onAuthor }) {
+  const [fontSize, setFontSize] = useState(20)
+  const [savedStories, setSavedStories] = useStoredState('rooted.saved-stories', [])
+  const [highlights, setHighlights] = useStoredState('rooted.highlights', [])
+  const [selection, setSelection] = useState('')
+  const saved = savedStories.includes(story.title)
+  const content = story.content || story.excerpt || 'This story is ready to be read. Check back soon for the full piece.'
+
+  const saveSelection = () => {
+    if (!selection) return
+    setHighlights((current) => [...current, { title: story.title, text: selection, createdAt: Date.now() }])
+    setSelection('')
+  }
+
+  return (
+    <article className="story-reader">
+      <header className="story-reader-toolbar">
+        <button className="text-button" onClick={onBack}><ChevronRight className="back-chevron" size={16} /> Back to stories</button>
+        <div className="reader-actions">
+          <button className={saved ? 'reader-action active' : 'reader-action'} onClick={() => setSavedStories((current) => saved ? current.filter((title) => title !== story.title) : [...current, story.title])} aria-label={saved ? 'Remove saved story' : 'Save story'}>
+            <Bookmark size={16} />{saved ? 'Saved' : 'Save'}
+          </button>
+          <button className="reader-action" onClick={() => setFontSize((size) => Math.max(16, size - 1))} aria-label="Decrease reading text size">A−</button>
+          <button className="reader-action" onClick={() => setFontSize((size) => Math.min(28, size + 1))} aria-label="Increase reading text size">A+</button>
+        </div>
+      </header>
+      <div className="story-reader-content">
+        <span className="eyebrow coral">{story.readTime || 5} MIN READ</span>
+        <h1>{story.title}</h1>
+        <button className="author-link story-reader-author" onClick={() => onAuthor?.(story.author)}>{story.author}</button>
+        {story.excerpt && <p className="story-reader-lede">{story.excerpt}</p>}
+        <div className="story-reader-copy" style={{ fontSize: `${fontSize}px` }} onMouseUp={() => setSelection(window.getSelection()?.toString().trim() || '')}>
+          {content.split(/\n\s*\n/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+        </div>
+        {selection && (
+          <div className="highlight-action">
+            <span>Passage selected</span>
+            <button className="text-button" onClick={saveSelection}>Save highlight</button>
+          </div>
+        )}
+        {highlights.filter((item) => item.title === story.title).length > 0 && (
+          <section className="saved-highlights"><h2>Highlights</h2>{highlights.filter((item) => item.title === story.title).map((item) => <blockquote key={item.createdAt}>{item.text}</blockquote>)}</section>
+        )}
+      </div>
+    </article>
+  )
+}
+
+function ClubProfile({ club, onBack, onJoin, joined }) {
+  return (
+    <section className="club-profile">
+      <button className="text-button" onClick={onBack}><ChevronRight className="back-chevron" size={16} /> All book clubs</button>
+      <div className="club-profile-hero">
+        <img src={club.image} alt="" />
+        <div>
+          <span className="eyebrow coral">ROOTED BOOK CLUB</span>
+          <h1>{club.title}</h1>
+          <p>Reading <strong>{club.book}</strong> together</p>
+          <div className="club-profile-meta"><span>{club.members} readers</span><span>{club.time}</span></div>
+          <button className="primary-button" onClick={onJoin} disabled={joined}>{joined ? 'Request sent' : 'Request to join'}</button>
+        </div>
+      </div>
+      <div className="club-profile-grid">
+        <section><span className="eyebrow">HOW IT WORKS</span><h2>A small table for good conversation.</h2><p>Read at your own pace, bring a question, and make room for different perspectives. New members can join when a seat opens.</p></section>
+        <ClubGuide clubs={[club]} />
+      </div>
+    </section>
+  )
+}
+
+function AuthorPublicationPage({ author, stories, onBack, onRead }) {
+  const [subscriptions, setSubscriptions] = useStoredState('rooted.subscribed-authors', [])
+  const subscribed = subscriptions.includes(author)
+  const authorStories = stories.filter((story) => story.author === author)
+
+  return (
+    <section className="author-page">
+      <button className="text-button" onClick={onBack}><ChevronRight className="back-chevron" size={16} /> Back to stories</button>
+      <div className="author-page-heading"><span className="avatar large">{author.charAt(0)}</span><div><span className="eyebrow coral">ROOTED WRITER</span><h1>{author}</h1><p>Essays, reflections, and reading notes.</p></div>
+        <button className="primary-button" disabled={subscribed} onClick={() => setSubscriptions((current) => [...current, author])}>{subscribed ? 'Subscribed' : 'Subscribe'}</button>
+      </div>
+      <div className="story-list"><span className="eyebrow">PUBLICATIONS</span>
+        {authorStories.length ? authorStories.map((story) => <button className="author-story-row" key={story.title} onClick={() => onRead(story)}><span><strong>{story.title}</strong><small>{story.readTime || 5} min read</small></span><ChevronRight size={17} /></button>) : <p>No stories from this writer yet.</p>}
+      </div>
+    </section>
+  )
+}
+
+function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
+  const [title, setTitle] = useState(initialStory?.title || '')
+  const [body, setBody] = useState(initialStory?.content || '')
   const [isSaving, setIsSaving] = useState(false)
   const [aiAction, setAiAction] = useState('')
   const [suggestion, setSuggestion] = useState(null)
@@ -1062,17 +1354,42 @@ function WriterModal({ onClose, onPublish, onAssist }) {
   )
 }
 
-function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs = defaultClubs }) {
+function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs = defaultClubs, onRead }) {
+  const toast = useContext(ToastContext)
   const [tab, setTab] = useState('Reader')
   const [playing, setPlaying] = useState(false)
   const [note, setNote] = useState('')
   const [sent, setSent] = useState(false)
+  const [notes, setNotes] = useStoredState('rooted.notes', [])
+  const [narrationError, setNarrationError] = useState('')
 
   const readerPosts = [
     { title: 'The grace of beginning again', meta: 'Amara Okafor · 8 min read', type: 'Essay' },
     { title: 'A field guide to holy friendship', meta: 'Paps O. · 5 min read', type: 'Audio' },
     { title: 'What we carry to the table', meta: 'Dami Adeyemi · 11 min read', type: 'Video' },
   ]
+
+  useEffect(() => () => window.speechSynthesis?.cancel(), [])
+
+  const toggleNarration = () => {
+    if (playing) {
+      window.speechSynthesis?.cancel()
+      setPlaying(false)
+      return
+    }
+    if (!('speechSynthesis' in window) || !('SpeechSynthesisUtterance' in window)) {
+      setNarrationError('Narration is not supported in this browser.')
+      return
+    }
+    setNarrationError('')
+    const text = readerPosts.map((post) => `${post.title}. ${post.meta}`).join('. ')
+    const utterance = new SpeechSynthesisUtterance(text)
+    utterance.onend = () => setPlaying(false)
+    utterance.onerror = () => { setPlaying(false); setNarrationError('Narration could not be played.') }
+    window.speechSynthesis.cancel()
+    window.speechSynthesis.speak(utterance)
+    setPlaying(true)
+  }
 
   return (
     <section className="publication-hub">
@@ -1106,21 +1423,21 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
                 <h3>{post.title}</h3>
                 <p>{post.meta}</p>
               </div>
-              <button className="text-button">
+              <button className="text-button" onClick={() => onRead?.(stories.find((story) => story.title === post.title) || { title: post.title, author: post.meta.split(' · ')[0], excerpt: post.meta })}>
                 Open <ChevronRight size={15} />
               </button>
             </article>
           ))}
 
           <div className="audio-player">
-            <button className="audio-play" onClick={() => setPlaying(!playing)}>
+            <button className="audio-play" onClick={toggleNarration} aria-label={playing ? 'Stop narration' : 'Play narration'}>
               {playing ? '||' : '▶'}
             </button>
             <div>
               <strong>{playing ? 'Playing narration' : 'Listen to your reading list'}</strong>
               <span>AI narration · Warm voice · 12 min</span>
             </div>
-            <span className="audio-progress">{playing ? '02:18' : '00:00'} / 12:00</span>
+            <span className="audio-progress" role="status">{playing ? 'Narration playing' : narrationError || 'Ready to listen'}</span>
           </div>
         </div>
       )}
@@ -1140,29 +1457,59 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
                  setSent(true)
                  setNote('')
                  toast('Note published to feed!')
-               } catch (e) {
-                 toast('Failed to post note')
-function WriterDashboard() {
-  const [stats, setStats] = useState({ views: 0, subscribers: 0, stories: 0 })
-  const [myStories, setMyStories] = useState([])
-  const [loading, setLoading] = useState(true)
+               } catch {
+                 setNotes((current) => [{ content: note.trim(), createdAt: Date.now() }, ...current])
+                 setSent(true)
+                 setNote('')
+                 toast('Note saved to this session')
+               }
+             }} disabled={!note.trim()}>
+               <Send size={15} />
+               Post note
+             </button>
+           </div>
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const [s, stories] = await Promise.all([api.getWriterStats(), api.getMyStories()])
-        setStats(s)
-        setMyStories(stories)
-      } catch (e) {
-        console.error('Failed to load dashboard')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [])
+           <textarea
+             value={note}
+             onChange={(event) => setNote(event.target.value)}
+             placeholder="What are you thinking about?"
+             className="note-composer"
+             aria-label="Write a note"
+             maxLength={1000}
+           />
+           {sent && <div className="note-sent" role="status">Your note is now in the discovery feed.</div>}
+           {notes.map((item) => (
+             <div className="note-card" key={item.createdAt}>
+               <span className="avatar small">M</span>
+               <div><strong>Mighty</strong><p>{item.content}</p><span>Just now</span></div>
+             </div>
+           ))}
+           <div className="note-card">
+             <span className="avatar small">A</span>
+             <div>
+               <strong>Amara Okafor</strong>
+               <p>“Some seasons ask us to grow quietly. Quiet growth is still growth.”</p>
+               <span>♡ 24 · 6 replies · 2h</span>
+             </div>
+           </div>
+         </div>
+       )}
 
-  if (loading) return <div className="view" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>Loading Dashboard...</div>
+      {tab === 'Studio' && (
+        <>
+          <AIRecommendations books={books} />
+          <ClubGuide clubs={clubs} />
+        </>
+      )}
+
+      {tab === 'Chat' && <RootedChat books={books} stories={stories} clubs={clubs} />}
+    </section>
+  )
+}
+
+function WriterDashboard({ stories = [], author, onEdit }) {
+  const myStories = stories.filter((story) => story.author === author)
+  const stats = { views: 0, subscribers: 0, stories: myStories.length }
 
   return (
     <div className="view">
@@ -1204,7 +1551,7 @@ function WriterDashboard() {
                   <span style={{ marginLeft: '8px', color: 'coral' }}>{Math.round((story.views / 1000) * 100)}% reach</span>
                 </p>
               </div>
-              <button className="text-button">Edit</button>
+              <button className="text-button" onClick={() => onEdit?.(story)}>Edit</button>
             </article>
           ))}
           {myStories.length === 0 && <p>You haven't published any stories yet.</p>}
@@ -1213,44 +1560,6 @@ function WriterDashboard() {
     </div>
   )
 }
-             }}>
-               <Send size={15} />
-               Post note
-             </button>
-           </div>
- 
-           <textarea
-             value={note}
-             onChange={(event) => setNote(event.target.value)}
-             placeholder="What are you thinking about?"
-             className="note-composer"
-           />
- 
-           {sent && <div className="note-sent">Your note is now in the discovery feed.</div>}
- 
-           <div className="note-card">
-             <span className="avatar small">A</span>
-             <div>
-               <strong>Amara Okafor</strong>
-               <p>“Some seasons ask us to grow quietly. Quiet growth is still growth.”</p>
-               <span>♡ 24 · ↗ 6 replies · 2h</span>
-             </div>
-           </div>
-         </div>
-       )}
-
-      {tab === 'Studio' && (
-        <>
-          <AIRecommendations books={books} />
-          <ClubGuide clubs={clubs} />
-        </>
-      )}
-
-      {tab === 'Chat' && <RootedChat books={books} stories={stories} clubs={clubs} />}
-    </section>
-  )
-}
-
 function PreviewImageRail({ books = defaultBooks, onSelect }) {
   const railRef = useRef(null)
   const cardsRef = useRef([])
@@ -1318,8 +1627,8 @@ function PreviewImageRail({ books = defaultBooks, onSelect }) {
   )
 }
 
-function BookPreview({ books }) {
-  const [selectedBook, setSelectedBook] = useState(books[0])
+function BookPreview({ books, book, onSelect }) {
+  const selectedBook = book || books[0]
 
   return (
     <section className="book-preview">
@@ -1332,7 +1641,7 @@ function BookPreview({ books }) {
         <span className="preview-status">INTERACTIVE 3D EDITION</span>
       </div>
  
-      <PreviewImageRail books={books} onSelect={setSelectedBook} />
+      <PreviewImageRail books={books} onSelect={onSelect} />
  
       <Book3D book={selectedBook} />
     </section>

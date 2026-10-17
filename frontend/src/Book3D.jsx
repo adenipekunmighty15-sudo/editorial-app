@@ -12,10 +12,11 @@ const SHEET_T = 0.014
 const COVER_T = 0.055
 const COVER_W = PAGE_W + 0.07
 const COVER_H = PAGE_H + 0.14
-const STACK_T = SHEETS * SHEET_T
 const OPEN_ANGLE = -Math.PI
 const TURN_SPEED = 7
 const COVER_SPEED = 5
+const TAP_SLOP = 8
+const TAP_MS = 450
 
 function makeTexture(canvas) {
   const texture = new THREE.CanvasTexture(canvas)
@@ -159,6 +160,8 @@ export default function Book3D() {
   const [opened, setOpened] = useState(false)
   const [turned, setTurned] = useState(0)
   const [bookmark, setBookmark] = useState(null)
+  const [immersive, setImmersive] = useState(false)
+  const [chromeVisible, setChromeVisible] = useState(true)
 
   const totalSpreads = SHEETS
 
@@ -172,15 +175,15 @@ export default function Book3D() {
       sheets: [],
       cover: null,
       bookmarkMesh: null,
-      currentTurned: 0,
+      bookmarkSpread: null,
       currentOpen: 0,
+      requestRender: () => {},
     }
     rigRef.current = rig
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
-    camera.position.set(0, 0.35, 3.6)
-    camera.lookAt(0, 0, 0)
+    camera.position.set(0, 0.4, 3.4)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
@@ -217,10 +220,15 @@ export default function Book3D() {
     controls.dampingFactor = 0.08
     controls.enablePan = false
     controls.minDistance = 1.7
-    controls.maxDistance = 6.5
+    controls.maxDistance = 7
     controls.minPolarAngle = 0.2
     controls.maxPolarAngle = Math.PI * 0.62
     controls.target.set(0, 0, 0)
+
+    let userAdjusted = false
+    controls.addEventListener('start', () => {
+      userAdjusted = true
+    })
 
     const shadow = new THREE.Mesh(
       new THREE.PlaneGeometry(6, 4),
@@ -242,39 +250,52 @@ export default function Book3D() {
     const raycaster = new THREE.Raycaster()
     const mouse = new THREE.Vector2()
 
-    const onTouch = (event) => {
+    let downPoint = null
+    const onPointerDown = (event) => {
+      downPoint = { x: event.clientX, y: event.clientY, t: performance.now() }
+    }
+    const onPointerUp = (event) => {
+      if (!downPoint) return
+      const dragDistance = Math.hypot(event.clientX - downPoint.x, event.clientY - downPoint.y)
+      const heldMs = performance.now() - downPoint.t
+      downPoint = null
+      if (dragDistance > TAP_SLOP || heldMs > TAP_MS) return
+
       const rect = mount.getBoundingClientRect()
-      const clientX = event.touches ? event.touches[0].clientX : event.clientX
-      const clientY = event.touches ? event.touches[0].clientY : event.clientY
-      
-      mouse.x = ((clientX - rect.left) / rect.width) * 2 - 1
-      mouse.y = -((clientY - rect.top) / rect.height) * 2 + 1
-
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1
       raycaster.setFromCamera(mouse, camera)
-      const intersects = raycaster.intersectObjects(bookRoot.children, true)
+      const hits = raycaster.intersectObjects(bookRoot.children, true)
+      if (!hits.length) return
 
-      if (intersects.length > 0) {
-        const point = intersects[0].point
-        if (point.x > 0) {
-          nextPage()
-        } else {
-          prevPage()
-        }
+      if (!rig.targets.opened) {
+        setOpened(true)
+        return
+      }
+      if (hits[0].point.x > 0) {
+        nextPage()
+      } else {
+        prevPage()
       }
     }
+    mount.addEventListener('pointerdown', onPointerDown)
+    mount.addEventListener('pointerup', onPointerUp)
 
-    mount.addEventListener('mousedown', onTouch)
-    mount.addEventListener('touchstart', onTouch)
-    // ... (inside return cleanup)
-    mount.removeEventListener('mousedown', onTouch)
-    mount.removeEventListener('touchstart', onTouch)
     const resize = () => {
       const { width, height } = mount.getBoundingClientRect()
       if (!width || !height) return
       renderer.setSize(width, height, false)
       camera.aspect = width / height
+      if (!userAdjusted) {
+        const vHalf = THREE.MathUtils.degToRad(camera.fov) / 2
+        const distH = 1.25 / Math.tan(vHalf)
+        const distW = 1.62 / (Math.tan(vHalf) * camera.aspect)
+        const dist = Math.max(distH, distW, 3.1)
+        camera.position.set(0, dist * 0.12, dist)
+        controls.target.set(0, 0, 0)
+      }
       camera.updateProjectionMatrix()
-      if (rig.requestRender) rig.requestRender()
+      rig.requestRender()
     }
 
     let frame = 0
@@ -318,8 +339,8 @@ export default function Book3D() {
       })
 
       if (rig.bookmarkMesh) {
-        rig.bookmarkMesh.visible = rig.bookmarkSpread !== null
-        if (rig.bookmarkSpread !== null) {
+        rig.bookmarkMesh.visible = rig.bookmarkSpread !== null && rig.targets.opened
+        if (rig.bookmarkMesh.visible) {
           const targetZ = 0.09 - rig.bookmarkSpread * 0.014
           const dz = targetZ - rig.bookmarkMesh.position.z
           if (Math.abs(dz) > 0.0005) {
@@ -367,6 +388,10 @@ export default function Book3D() {
         if (rig.disposed) return
         const model = gltf.scene
         model.traverse((child) => {
+          if (/clasp/i.test(child.name || '')) {
+            child.visible = false
+            return
+          }
           if (child.isMesh) {
             child.castShadow = true
             child.receiveShadow = false
@@ -468,10 +493,9 @@ export default function Book3D() {
             emissiveIntensity: 0.4,
           }),
         )
-        rig.bookmarkMesh.position.set(PAGE_W - 0.03, 0, 0.09)
+        rig.bookmarkMesh.position.set(PAGE_W + 0.015, 0, 0.09)
         rig.bookmarkMesh.visible = false
         bookRoot.add(rig.bookmarkMesh)
-        rig.bookmarkSpread = null
 
         resize()
         setReady(true)
@@ -495,8 +519,8 @@ export default function Book3D() {
       controls.dispose()
       pmrem.dispose()
       envRT.dispose()
-      mount.removeEventListener('mousedown', onTouch)
-      mount.removeEventListener('touchstart', onTouch)
+      mount.removeEventListener('pointerdown', onPointerDown)
+      mount.removeEventListener('pointerup', onPointerUp)
       scene.traverse((child) => {
         if (child.isMesh) {
           child.geometry?.dispose()
@@ -537,6 +561,29 @@ export default function Book3D() {
     }
   }, [bookmark])
 
+  useEffect(() => {
+    if (!immersive) {
+      setChromeVisible(true)
+      return undefined
+    }
+    let timer
+    const wake = () => {
+      setChromeVisible(true)
+      clearTimeout(timer)
+      timer = setTimeout(() => setChromeVisible(false), 2600)
+    }
+    wake()
+    window.addEventListener('pointermove', wake)
+    window.addEventListener('pointerdown', wake)
+    window.addEventListener('keydown', wake)
+    return () => {
+      clearTimeout(timer)
+      window.removeEventListener('pointermove', wake)
+      window.removeEventListener('pointerdown', wake)
+      window.removeEventListener('keydown', wake)
+    }
+  }, [immersive])
+
   const closeBook = useCallback(() => {
     setOpened(false)
     setTurned(0)
@@ -554,11 +601,15 @@ export default function Book3D() {
   useEffect(() => {
     const onKey = (event) => {
       if (event.key === 'ArrowRight') nextPage()
-      if (event.key === 'ArrowLeft') prevPage()
+      else if (event.key === 'ArrowLeft') prevPage()
+      else if (event.key === 'Escape') {
+        if (immersive) setImmersive(false)
+        else closeBook()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [nextPage, prevPage])
+  }, [nextPage, prevPage, immersive, closeBook])
 
   const leftIndex = turned * 2 - 1
   const rightIndex = turned * 2
@@ -568,72 +619,91 @@ export default function Book3D() {
       : `Pages ${leftIndex + 1}–${rightIndex + 1} of ${BOOK_PAGES.length}`
 
   return (
-    <div className="book3d">
+    <div className={`book3d ${immersive ? 'is-immersive' : 'is-inline'}`}>
       <div className="book3d-stage">
         <div ref={mountRef} className="book3d-canvas" />
         {!ready && !failed && <div className="book3d-loading">Binding the book…</div>}
         {failed && <div className="book3d-loading error">{failed}</div>}
-        <div className="book3d-hint">Drag to orbit · scroll to zoom</div>
-      </div>
 
-      <div className="book3d-controls">
-        <div className="book3d-row">
-          {!opened ? (
-            <button className="primary-button" onClick={() => setOpened(true)} disabled={!ready}>
-              Open the book
-            </button>
-          ) : (
-            <button className="page-button" onClick={closeBook}>
-              Close
-            </button>
-          )}
-          <button className="page-button" onClick={prevPage} disabled={!opened || turned === 0}>
-            Prev
-          </button>
-          <button
-            className="page-button primary"
-            onClick={nextPage}
-            disabled={!opened || turned === totalSpreads}
-          >
-            Turn page
-          </button>
-        </div>
+        <div className={`book3d-chrome ${chromeVisible ? '' : 'is-hidden'}`}>
+          <header className="book3d-topbar">
+            <div className="book3d-brand">
+              <span className="book3d-brand-title">{BOOK_META.title}</span>
+              <span className="book3d-page-label">{ready ? pageLabel : '—'}</span>
+            </div>
+            <div className="book3d-topactions">
+              <button
+                className={bookmark === turned ? 'bookmark-button active' : 'bookmark-button'}
+                onClick={() => setBookmark((value) => (value === turned ? null : turned))}
+                disabled={!ready}
+                title={bookmark === turned ? 'Remove bookmark' : 'Bookmark this spread'}
+                aria-label={bookmark === turned ? 'Remove bookmark' : 'Bookmark this spread'}
+              >
+                <IconBookmark />
+              </button>
+              {bookmark !== null && bookmark !== turned && (
+                <button
+                  className="text-button book3d-goto"
+                  onClick={() => {
+                    setOpened(true)
+                    setTurned(bookmark)
+                  }}
+                >
+                  Go to bookmark <ChevronArrow />
+                </button>
+              )}
+              <button
+                className="icon-button"
+                onClick={() => setImmersive((value) => !value)}
+                title={immersive ? 'Exit full screen (Esc)' : 'Read full screen'}
+                aria-label={immersive ? 'Exit full screen' : 'Read full screen'}
+              >
+                {immersive ? <IconCollapse /> : <IconExpand />}
+              </button>
+            </div>
+          </header>
 
-        <div className="book3d-row book3d-meta">
-          <span className="book3d-page-label">{ready ? pageLabel : '—'}</span>
-          <button
-            className={bookmark === turned ? 'bookmark-button active' : 'bookmark-button'}
-            onClick={() => setBookmark((value) => (value === turned ? null : turned))}
-            disabled={!ready}
-          >
-            {bookmark === turned ? 'Bookmarked' : 'Bookmark this spread'}
-          </button>
-          {bookmark !== null && bookmark !== turned && (
+          <footer className="book3d-controls">
+            {!opened ? (
+              <button className="primary-button" onClick={() => setOpened(true)} disabled={!ready}>
+                Open the book
+              </button>
+            ) : (
+              <button className="page-button" onClick={closeBook}>
+                Close
+              </button>
+            )}
             <button
-              className="text-button"
-              onClick={() => {
-                setOpened(true)
-                setTurned(bookmark)
-              }}
+              className="page-button nav"
+              onClick={prevPage}
+              disabled={!opened || turned === 0}
+              aria-label="Previous page"
             >
-              Go to bookmark <ChevronArrow />
+              <ChevronLeft />
             </button>
-          )}
+            <input
+              className="book3d-slider"
+              type="range"
+              min="0"
+              max={totalSpreads}
+              value={turned}
+              disabled={!ready}
+              onChange={(event) => {
+                setOpened(true)
+                setTurned(Number(event.target.value))
+              }}
+              aria-label="Jump to page"
+            />
+            <button
+              className="page-button nav"
+              onClick={nextPage}
+              disabled={!opened || turned === totalSpreads}
+              aria-label="Next page"
+            >
+              <ChevronArrow />
+            </button>
+          </footer>
         </div>
-
-        <input
-          className="book3d-slider"
-          type="range"
-          min="0"
-          max={totalSpreads}
-          value={turned}
-          disabled={!ready}
-          onChange={(event) => {
-            setOpened(true)
-            setTurned(Number(event.target.value))
-          }}
-          aria-label="Jump to page"
-        />
       </div>
     </div>
   )
@@ -643,6 +713,38 @@ function ChevronArrow() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M9 6l6 6-6 6" />
+    </svg>
+  )
+}
+
+function ChevronLeft() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M15 6l-6 6 6 6" />
+    </svg>
+  )
+}
+
+function IconBookmark() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M6 3h12v18l-6-4.5L6 21z" />
+    </svg>
+  )
+}
+
+function IconExpand() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M9 3H3v6M15 3h6v6M9 21H3v-6M15 21h6v-6" />
+    </svg>
+  )
+}
+
+function IconCollapse() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M3 9h6V3M21 9h-6V3M3 15h6v6M21 15h-6v6" />
     </svg>
   )
 }
