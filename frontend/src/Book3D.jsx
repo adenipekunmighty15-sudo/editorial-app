@@ -183,46 +183,49 @@ export default function Book3D() {
 
     const scene = new THREE.Scene()
     const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100)
-    camera.position.set(0, 0.4, 3.4)
+    camera.position.set(0, 0.6, 3.8)
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true })
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     renderer.setClearColor(0x000000, 0)
     renderer.shadowMap.enabled = true
-    renderer.shadowMap.type = THREE.PCFShadowMap
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    renderer.toneMappingExposure = 0.92
+    renderer.toneMappingExposure = 1.1
     mount.appendChild(renderer.domElement)
 
     const pmrem = new THREE.PMREMGenerator(renderer)
     const envRT = pmrem.fromScene(new RoomEnvironment(), 0.04)
     scene.environment = envRT.texture
 
-    scene.add(new THREE.HemisphereLight(0xfff2dc, 0x2a1810, 0.6))
-    const key = new THREE.DirectionalLight(0xffe6c2, 1.6)
-    key.position.set(-3.5, 4.5, 5)
+    // Sanctuary Lighting: Warm, directional, and intimate
+    scene.add(new THREE.HemisphereLight(0xfffcf0, 0x2a1810, 0.4))
+    
+    const key = new THREE.DirectionalLight(0xffe6c2, 2.0)
+    key.position.set(-4, 5, 6)
     key.castShadow = true
-    key.shadow.mapSize.set(1024, 1024)
+    key.shadow.mapSize.set(2048, 2048)
     key.shadow.camera.near = 1
     key.shadow.camera.far = 20
-    key.shadow.camera.left = -4
-    key.shadow.camera.right = 4
-    key.shadow.camera.top = 4
-    key.shadow.camera.bottom = -4
-    key.shadow.bias = -0.0006
+    key.shadow.camera.left = -5
+    key.shadow.camera.right = 5
+    key.shadow.camera.top = 5
+    key.shadow.camera.bottom = -5
+    key.shadow.bias = -0.0005
     scene.add(key)
-    const rim = new THREE.DirectionalLight(0xa9c4ff, 0.7)
-    rim.position.set(4, 2, -4)
+
+    const rim = new THREE.DirectionalLight(0xa9c4ff, 0.8)
+    rim.position.set(5, 2, -5)
     scene.add(rim)
 
     const controls = new OrbitControls(camera, renderer.domElement)
     controls.enableDamping = true
     controls.dampingFactor = 0.08
     controls.enablePan = false
-    controls.minDistance = 1.7
-    controls.maxDistance = 7
-    controls.minPolarAngle = 0.2
-    controls.maxPolarAngle = Math.PI * 0.62
+    controls.minDistance = 2.0
+    controls.maxDistance = 6
+    controls.minPolarAngle = 0.1
+    controls.maxPolarAngle = Math.PI * 0.6
     controls.target.set(0, 0, 0)
 
     let userAdjusted = false
@@ -407,10 +410,13 @@ export default function Book3D() {
 
         const coverArt = new THREE.Mesh(
           new THREE.PlaneGeometry(COVER_W * 0.96, COVER_H * 0.96),
-          new THREE.MeshStandardMaterial({
+          new THREE.MeshPhysicalMaterial({
             map: createCoverArtTexture(),
-            roughness: 0.5,
-            envMapIntensity: 0.4,
+            roughness: 0.4,
+            metalness: 0.1,
+            clearcoat: 0.3,
+            clearcoatRoughness: 0.2,
+            envMapIntensity: 0.6,
           }),
         )
         coverArt.position.set(COVER_W / 2, 0, COVER_T / 2 + 0.002)
@@ -418,9 +424,10 @@ export default function Book3D() {
 
         const frontEndpaper = new THREE.Mesh(
           new THREE.PlaneGeometry(COVER_W * 0.9, COVER_H * 0.9),
-          new THREE.MeshStandardMaterial({
+          new THREE.MeshPhysicalMaterial({
             map: createEndpaperTexture('Ex Libris', 'This book belongs to'),
-            roughness: 0.85,
+            roughness: 0.9,
+            clearcoat: 0,
           }),
         )
         frontEndpaper.rotation.y = Math.PI
@@ -431,9 +438,10 @@ export default function Book3D() {
         if (backCover) {
           const backEndpaper = new THREE.Mesh(
             new THREE.PlaneGeometry(COVER_W * 0.9, COVER_H * 0.9),
-            new THREE.MeshStandardMaterial({
+            new THREE.MeshPhysicalMaterial({
               map: createEndpaperTexture('Rooted', 'Read deeply. Live fully.'),
-              roughness: 0.85,
+              roughness: 0.9,
+              clearcoat: 0,
             }),
           )
           backEndpaper.position.set(COVER_W / 2 - 0.02, 0, COVER_T / 2 + 0.002)
@@ -457,14 +465,26 @@ export default function Book3D() {
 
           const front = new THREE.Mesh(
             new THREE.PlaneGeometry(PAGE_W * 0.94, PAGE_H * 0.96),
-            new THREE.MeshStandardMaterial({ map: frontTexture, roughness: 0.92 }),
+            new THREE.MeshPhysicalMaterial({ 
+                map: frontTexture, 
+                roughness: 0.8, 
+                clearcoat: 0, 
+                sheen: 0.5,
+                sheenRoughness: 0.8
+            }),
           )
           front.position.set(PAGE_W / 2, 0, SHEET_T / 2 + 0.0015)
           mesh.add(front)
 
           const back = new THREE.Mesh(
             new THREE.PlaneGeometry(PAGE_W * 0.94, PAGE_H * 0.96),
-            new THREE.MeshStandardMaterial({ map: backTexture, roughness: 0.92 }),
+            new THREE.MeshPhysicalMaterial({ 
+                map: backTexture, 
+                roughness: 0.8, 
+                clearcoat: 0,
+                sheen: 0.5,
+                sheenRoughness: 0.8
+            }),
           )
           back.rotation.y = Math.PI
           back.position.set(PAGE_W / 2, 0, -SHEET_T / 2 - 0.0015)
