@@ -43,6 +43,15 @@ const verses = [
   { text: '“Grace be with you all.”', ref: 'Galatians 6:18' },
 ]
 
+const reflectionPrompts = [
+  { id: 1, text: 'Where did you encounter stillness today?', category: 'Presence' },
+  { id: 2, text: 'What is a truth you have struggled to accept recently?', category: 'Honesty' },
+  { id: 3, text: 'Describe a moment when a stranger showed you unexpected kindness.', category: 'Connection' },
+  { id: 4, text: 'If your current season of life was a book chapter, what would it be titled?', category: 'Perspective' },
+  { id: 5, text: 'What does "rest" actually feel like in your body?', category: 'Sabbath' },
+  { id: 6, text: 'Write a letter to your future self about the faith you have right now.', category: 'Growth' },
+]
+
 function QuoteCard() {
   const quotes = [
     { text: '“We are what we repeatedly do. Excellence, then, is not an act, but a habit.”', author: 'Will Durant' },
@@ -1251,12 +1260,57 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
 }
 
 function StoryReader({ story, onBack, onAuthor }) {
+  const toast = useContext(ToastContext)
   const [fontSize, setFontSize] = useState(20)
   const [savedStories, setSavedStories] = useStoredState('rooted.saved-stories', [])
   const [highlights, setHighlights] = useStoredState('rooted.highlights', [])
   const [selection, setSelection] = useState('')
+  const [isPiercing, setIsPiercing] = useState(false)
+  const [aiQuestion, setAiQuestion] = useState('')
+  const [reflection, setReflection] = useState('')
+  const [savingReflection, setSavingReflection] = useState(false)
   const saved = savedStories.includes(story.title)
   const content = story.content || story.excerpt || 'This story is ready to be read. Check back soon for the full piece.'
+
+  const handlePierce = async () => {
+    if (!selection) return
+    setIsPiercing(true)
+    setAiQuestion('')
+    try {
+      const result = await api.post('/ai/pierce', { text: selection })
+      setAiQuestion(result.question)
+    } catch (err) {
+      toast('The companion is silent right now. Try again later.')
+    } finally {
+      setIsPiercing(false)
+    }
+  }
+
+  const saveSoulMarker = async () => {
+    if (!reflection.trim()) return
+    setSavingReflection(true)
+    try {
+      const user = supabase.auth.getUser()
+      const { data: { user: currentUser } } = await user
+      
+      await api.post('/soul-markers', {
+        user_id: currentUser?.id,
+        source_text: selection,
+        ai_question: aiQuestion,
+        user_reflection: reflection,
+        source_type: 'story',
+        source_id: story.title,
+      })
+      toast('Reflection saved to your soul map')
+      setSelection('')
+      setReflection('')
+      setAiQuestion('')
+    } catch (err) {
+      toast('Could not save reflection.')
+    } finally {
+      setSavingReflection(false)
+    }
+  }
 
   const saveSelection = () => {
     if (!selection) return
@@ -1287,7 +1341,36 @@ function StoryReader({ story, onBack, onAuthor }) {
         {selection && (
           <div className="highlight-action">
             <span>Passage selected</span>
-            <button className="text-button" onClick={saveSelection}>Save highlight</button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button className="text-button" onClick={saveSelection}>Save highlight</button>
+              <button className="primary-button" style={{ fontSize: '11px', padding: '4px 12px' }} onClick={handlePierce}>
+                <Sparkles size={14} /> Ask the Soul
+              </button>
+            </div>
+          </div>
+        )}
+        {aiQuestion && (
+          <div className="soul-marker-modal">
+            <div className="soul-marker-content">
+              <button className="close-button" onClick={() => { setAiQuestion(''); setReflection(''); setSelection(''); }}>
+                <X size={20} />
+              </button>
+              <span className="eyebrow coral">SOUL REFLECTION</span>
+              <p className="soul-question">{aiQuestion}</p>
+              <textarea 
+                className="soul-textarea" 
+                placeholder="Listen to your heart... what is the answer?" 
+                value={reflection} 
+                onChange={e => setReflection(e.target.value)}
+              />
+              <button 
+                className="primary-button" 
+                onClick={saveSoulMarker} 
+                disabled={!reflection.trim() || savingReflection}
+              >
+                {savingReflection ? 'Saving...' : 'Save to Soul Map'}
+              </button>
+            </div>
           </div>
         )}
         {highlights.filter((item) => item.title === story.title).length > 0 && (
@@ -1450,19 +1533,60 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
   )
 }
 
-function AuthorPublicationPage({ author, stories, onBack, onRead }) {
-  const [subscriptions, setSubscriptions] = useStoredState('rooted.subscribed-authors', [])
-  const subscribed = subscriptions.includes(author)
-  const authorStories = stories.filter((story) => story.author === author)
+function SoulMap() {
+  const toast = useContext(ToastContext)
+  const [markers, setMarkers] = useState([])
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    const loadMarkers = async () => {
+      setBusy(true)
+      setError('')
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) throw new Error('You must be signed in to view your soul map.')
+        const result = await api.get(`/soul-markers?user_id=${user.id}`)
+        setMarkers(result.markers || [])
+      } catch (err) {
+        setError(err.message)
+      } finally {
+        setBusy(false)
+      }
+    }
+    loadMarkers()
+  }, [])
 
   return (
-    <section className="author-page">
-      <button className="text-button" onClick={onBack}><ChevronRight className="back-chevron" size={16} /> Back to stories</button>
-      <div className="author-page-heading"><span className="avatar large">{author.charAt(0)}</span><div><span className="eyebrow coral">ROOTED WRITER</span><h1>{author}</h1><p>Essays, reflections, and reading notes.</p></div>
-        <button className="primary-button" disabled={subscribed} onClick={() => setSubscriptions((current) => [...current, author])}>{subscribed ? 'Subscribed' : 'Subscribe'}</button>
+    <section className="soul-map-container">
+      <div className="view-heading">
+        <div>
+          <span className="eyebrow coral">JOURNEY OF THE HEART</span>
+          <h1>Your Soul Map</h1>
+          <p>A gallery of breakthroughs, reflections, and quiet realizations.</p>
+        </div>
       </div>
-      <div className="story-list"><span className="eyebrow">PUBLICATIONS</span>
-        {authorStories.length ? authorStories.map((story) => <button className="author-story-row" key={story.title} onClick={() => onRead(story)}><span><strong>{story.title}</strong><small>{story.readTime || 5} min read</small></span><ChevronRight size={17} /></button>) : <p>No stories from this writer yet.</p>}
+
+      {busy && <div className="soul-empty"><Sparkles size={20} /><span>Tracing your journey...</span></div>}
+      {error && <div className="soul-empty error"><X size={20} /><span>{error}</span></div>}
+      
+      {!busy && !error && markers.length === 0 && (
+        <div className="soul-empty">
+          <BookOpen size={40} />
+          <strong>Your map is currently a blank page.</strong>
+          <span>Highlight a passage in a story and "Ask the Soul" to create your first marker.</span>
+        </div>
+      )}
+
+      <div className="soul-map-grid">
+        {markers.map((marker, index) => (
+          <article className="soul-card" key={marker.id || index}>
+            <span className="source">{marker.source_type} · {marker.source_id}</span>
+            <span className="passage">"{marker.source_text}"</span>
+            <span className="question">{marker.ai_question}</span>
+            <p className="reflection">{marker.user_reflection}</p>
+          </article>
+        ))}
       </div>
     </section>
   )
@@ -1475,11 +1599,43 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
   const [aiAction, setAiAction] = useState('')
   const [suggestion, setSuggestion] = useState(null)
   const [aiError, setAiError] = useState('')
+  const [promptIndex, setPromptIndex] = useState(0)
+  const [channel, setChannel] = useState(null)
 
-  const handleTextChange = (updater) => {
-    updater()
-    setIsSaving(true)
-    window.setTimeout(() => setIsSaving(false), 1000)
+  useEffect(() => {
+    if (!initialStory?.title) return;
+
+    const storyChannel = supabase.channel(`story-edit-${initialStory.title}`)
+      .on('broadcast', { event: 'edit' }, ({ payload }) => {
+        if (payload.body !== body) setBody(payload.body);
+        if (payload.title !== title) setTitle(payload.title);
+      })
+      .subscribe();
+
+    setChannel(storyChannel);
+
+    return () => {
+      supabase.removeChannel(storyChannel);
+    };
+  }, [initialStory?.title]);
+
+  const handleTextChange = (updater, field, value) => {
+    updater();
+    setIsSaving(true);
+    window.setTimeout(() => setIsSaving(false), 1000);
+
+    if (channel) {
+      channel.send({
+        type: 'broadcast',
+        event: 'edit',
+        payload: { [field]: value },
+      });
+    }
+  }
+
+
+  const cyclePrompt = () => {
+    setPromptIndex((prev) => (prev + 1) % reflectionPrompts.length)
   }
 
   const requestAssistance = async (action) => {
@@ -1491,10 +1647,10 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
     setAiError('')
     setSuggestion(null)
     try {
-      const result = await onAssist({ action, title, text: body })
-      setSuggestion({ action, text: result.text })
+      const result = await api.post('/ai/assist', { action, text: body })
+      setSuggestion({ action, text: result.result })
     } catch (error) {
-      setAiError(error.message)
+      setAiError(error.message || 'The AI assistant is resting. Try again later.')
     } finally {
       setAiAction('')
     }
@@ -1502,8 +1658,8 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
 
   const applySuggestion = () => {
     if (!suggestion) return
-    const updatedBody = suggestion.action === 'continue'
-      ? `${body.trimEnd()}\n\n${suggestion.text}`
+    const updatedBody = suggestion.action === 'headline'
+      ? `${suggestion.text}\n\n${body}`
       : suggestion.text
     setBody(updatedBody)
     setSuggestion(null)
@@ -1527,35 +1683,59 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
 
         <div className="writer-ai-toolbar" aria-label="AI writing actions">
           <span><Sparkles size={15} /> Writing partner</span>
-          <button onClick={() => requestAssistance('continue')} disabled={Boolean(aiAction)} title="Continue this draft">
-            <WandSparkles size={15} /> Continue
+          <button onClick={() => requestAssistance('refine')} disabled={Boolean(aiAction)} title="Refine tone and flow">
+            <WandSparkles size={15} /> Refine
           </button>
-          <button onClick={() => requestAssistance('revise')} disabled={Boolean(aiAction)} title="Revise this draft">
-            <Check size={15} /> Revise
-          </button>
-          <button onClick={() => requestAssistance('summarize')} disabled={Boolean(aiAction)} title="Summarize this draft">
+          <button onClick={() => requestAssistance('summarize')} disabled={Boolean(aiAction)} title="Create a poetic summary">
             <FileText size={15} /> Summarize
           </button>
-          {aiAction && <span className="writer-ai-state" role="status">Working with your local model...</span>}
+          <button onClick={() => requestAssistance('headline')} disabled={Boolean(aiAction)} title="Suggest minimalist headlines">
+            <Check size={15} /> Headlines
+          </button>
+          {aiAction && <span className="writer-ai-state" role="status">Listening to the silence...</span>}
           {aiError && <span className="writer-ai-error" role="alert">{aiError}</span>}
         </div>
 
         <main className="full-page-editor">
-          <span className="eyebrow coral">NEW STORY</span>
-          <input
-            className="editor-title"
-            placeholder="Untitled story"
-            value={title}
-            onChange={(event) => handleTextChange(() => setTitle(event.target.value))}
-            autoFocus
-          />
-          <textarea
-            className="editor-body"
-            placeholder="Begin writing here..."
-            value={body}
-            onChange={(event) => handleTextChange(() => setBody(event.target.value))}
-            rows="18"
-          />
+          <div className="book-editor-spread">
+            <div className="book-spine" />
+            <div className="book-page book-page-left">
+              <span className="eyebrow coral">NEW STORY</span>
+              <input
+                className="editor-title"
+                placeholder="Untitled story"
+                value={title}
+                onChange={(event) => handleTextChange(() => setTitle(event.target.value))}
+                autoFocus
+              />
+              <div className="editor-container">
+                <textarea
+                  className="editor-body"
+                  placeholder={body.trim() ? "Continue writing..." : `Reflection: ${reflectionPrompts[promptIndex].text}`}
+                  value={body}
+                  onChange={(event) => handleTextChange(() => setBody(event.target.value))}
+                  rows="18"
+                />
+                {!body.trim() && (
+                  <div className="prompt-overlay">
+                    <div className="prompt-content">
+                      <span className="prompt-category">{reflectionPrompts[promptIndex].category}</span>
+                      <p>{reflectionPrompts[promptIndex].text}</p>
+                      <button className="text-button prompt-cycle" onClick={cyclePrompt}>
+                        <Sparkles size={14} /> Different prompt
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="book-page book-page-right">
+              <div className="page-content-placeholder">
+                <div className="page-decoration"></div>
+                <p className="page-hint">Your words will flow here...</p>
+              </div>
+            </div>
+          </div>
           {suggestion && (
             <section className="writer-suggestion" aria-live="polite">
               <div className="writer-suggestion-heading">

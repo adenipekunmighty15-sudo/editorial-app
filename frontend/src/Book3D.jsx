@@ -3,7 +3,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
-import { BOOK_PAGES, BOOK_META, createPageTexture } from './bookContent'
+import { BOOK_META, createPageTexture, paginateText } from './bookContent'
 
 const SHEETS = 12
 const PAGE_W = 1.35

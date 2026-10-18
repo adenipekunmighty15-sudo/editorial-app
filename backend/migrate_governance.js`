@@ -1,0 +1,47 @@
+const { createClient } = require('@supabase/supabase-js')
+require('dotenv').config()
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+
+async function migrate() {
+  console.log('🛡️ Implementing Sanctuary Governance...')
+  
+  const sql = `
+    -- Add Governance to Clubs
+    ALTER TABLE public.clubs 
+    ADD COLUMN IF NOT EXISTS covenant TEXT DEFAULT 'We read with an open heart and a quiet mind.',
+    ADD COLUMN IF NOT EXISTS current_milestone INTEGER DEFAULT 1,
+    ADD COLUMN IF NOT EXISTS member_count INTEGER DEFAULT 0;
+
+    -- Create Covenant Signatures table
+    CREATE TABLE IF NOT EXISTS public.covenant_signatures (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+      club_id TEXT NOT NULL,
+      signed_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(user_id, club_id)
+    );
+
+    -- Create Member Roles table
+    CREATE TABLE IF NOT EXISTS public.member_roles (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+      club_id TEXT NOT NULL,
+      role_type TEXT CHECK (role_type IN ('Anchor', 'Spark', 'Bridge', 'Seeker')),
+      assigned_at TIMESTAMPTZ DEFAULT now(),
+      UNIQUE(user_id, club_id)
+    );
+  `
+  
+  // Using a generic RPC call for SQL execution as previously established
+  const { error } = await supabase.rpc('exec_sql', { sql }) 
+  
+  if (error) {
+    console.error('❌ Governance Migration failed:', error)
+    process.exit(1)
+  }
+  
+  console.log('✅ Sanctuary Governance deployed. Rules are now in effect.')
+}
+
+migrate()

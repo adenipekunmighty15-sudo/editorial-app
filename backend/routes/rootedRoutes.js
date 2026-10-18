@@ -16,10 +16,17 @@ router.get('/clubs', getClubs);
 router.post('/clubs', writeGuard, addClub);
 router.get('/stories', getStories);
 router.post('/stories', writeGuard, addStory);
+router.post('/ai/assist', aiController.assist);
 router.post('/ai/write', aiController.write);
 router.post('/ai/genre', aiController.analyzeGenre);
 router.post('/ai/recommendations', aiController.recommend);
 router.post('/ai/club-guide', aiController.clubGuide);
 router.post('/ai/chat', aiController.chat);
+router.post('/ai/pierce', aiController.pierce);
+router.post('/soul-markers', rootedController.saveSoulMarker);
+router.get('/soul-markers', rootedController.getSoulMarkers);
+router.post('/sign-covenant', rootedController.signCovenant);
+
+module.exports = router;
 
 module.exports = router;

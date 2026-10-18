@@ -1,0 +1,43 @@
+const { createClient } = require('@supabase/supabase-js')
+require('dotenv').config()
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+
+async function migrate() {
+  console.log('🚀 Migrating Soul-Markers schema...')
+  
+  const sql = `
+    CREATE TABLE IF NOT EXISTS public.soul_markers (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+      source_text TEXT NOT NULL,
+      ai_question TEXT NOT NULL,
+      user_reflection TEXT,
+      source_type TEXT NOT NULL CHECK (source_type IN ('book', 'story')),
+      source_id TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
+
+    -- Enable Row Level Security
+    ALTER TABLE public.soul_markers ENABLE ROW LEVEL SECURITY;
+
+    -- Users can only see and edit their own markers
+    CREATE POLICY "Users can manage their own soul markers" 
+    ON public.soul_markers 
+    FOR ALL 
+    USING (auth.uid() = user_id);
+  `
+  
+  const { error } = await supabase.rpc('exec_sql', { sql }) 
+  // Note: This assumes a helper function 'exec_sql' exists in Supabase for raw SQL via RPC.
+  // If not, I will use a direct connection or a different method.
+  
+  if (error) {
+    console.error('❌ Migration failed:', error)
+    process.exit(1)
+  }
+  
+  console.log('✅ Soul-Markers schema deployed successfully!')
+}
+
+migrate()

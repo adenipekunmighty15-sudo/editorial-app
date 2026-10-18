@@ -25,7 +25,11 @@ app.use(
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
         imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com'],
-        connectSrc: ["'self'"],
+        connectSrc: [
+          "'self'",
+          process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).origin : '',
+          process.env.OLLAMA_URL ? new URL(process.env.OLLAMA_URL).origin : '',
+        ].filter(Boolean),
         baseUri: ["'self'"],
         formAction: ["'self'"],
         objectSrc: ["'none'"],

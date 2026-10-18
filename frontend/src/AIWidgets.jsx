@@ -79,15 +79,25 @@ export function GenreOrganizer() {
 
 export function AIRecommendations({ books }) {
   const [preferences, setPreferences] = useState('')
+  const [mood, setMood] = useState('Seeking')
   const [recommendations, setRecommendations] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  const moods = [
+    { label: 'Seeking', icon: '🔍', desc: 'Looking for truth and direction' },
+    { label: 'Restless', icon: '🌪️', desc: 'Searching for peace and stillness' },
+    { label: 'Joyful', icon: '✨', desc: 'Celebrating faith and life' },
+    { label: 'Grieving', icon: '🕯️', desc: 'Finding comfort in the dark' },
+    { label: 'Curious', icon: '📖', desc: 'Exploring new perspectives' },
+  ]
 
   const getRecommendations = async () => {
     setBusy(true)
     setError('')
     try {
-      const result = await ai.recommend({ preferences, books })
+      const combinedPreferences = `Mood: ${mood}. ${preferences}`
+      const result = await ai.recommend({ preferences: combinedPreferences, books })
       setRecommendations(result.recommendations || [])
     } catch (requestError) {
       setError(requestError.message)
@@ -98,17 +108,32 @@ export function AIRecommendations({ books }) {
 
   return (
     <section className="ai-tool-panel">
-      <div className="ai-tool-title"><BookOpen size={18} /><div><strong>Reading companion</strong><span>Recommendations from this library</span></div></div>
+      <div className="ai-tool-title"><BookOpen size={18} /><div><strong>Reading companion</strong><span>Recommendations for your current season</span></div></div>
+      
+      <div className="mood-selector" aria-label="Select your current mood">
+        {moods.map((m) => (
+          <button 
+            key={m.label} 
+            className={`mood-chip ${mood === m.label ? 'active' : ''}`}
+            onClick={() => setMood(m.label)}
+            title={m.desc}
+          >
+            <span className="mood-icon">{m.icon}</span>
+            <span className="mood-label">{m.label}</span>
+          </button>
+        ))}
+      </div>
+
       <div className="ai-inline-form">
         <input
           value={preferences}
           onChange={(event) => setPreferences(event.target.value)}
-          onKeyDown={(event) => event.key === 'Enter' && preferences.trim() && getRecommendations()}
-          placeholder="What do you want to read? e.g. thoughtful memoirs about faith"
+          onKeyDown={(event) => event.key === 'Enter' && (preferences.trim() || mood) && getRecommendations()}
+          placeholder="What specifically are you looking for?"
           aria-label="Reading interests"
           maxLength={1000}
         />
-        <button className="icon-command" onClick={getRecommendations} disabled={!preferences.trim() || busy} aria-label="Get recommendations" title="Get recommendations">
+        <button className="icon-command" onClick={getRecommendations} disabled={(!preferences.trim() && !mood) || busy} aria-label="Get recommendations" title="Get recommendations">
           <ArrowUp size={17} />
         </button>
       </div>
