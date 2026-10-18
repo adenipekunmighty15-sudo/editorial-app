@@ -490,6 +490,20 @@ export default function Book3D() {
           back.position.set(PAGE_W / 2, 0, -SHEET_T / 2 - 0.0015)
           mesh.add(back)
 
+          // Gold Leaf Trim: Adds a metallic gold edge to the page block
+          const goldTrim = new THREE.Mesh(
+            new THREE.BoxGeometry(0.005, PAGE_H * 0.96, SHEET_T * 2),
+            new THREE.MeshPhysicalMaterial({ 
+                color: 0xffd700, 
+                metalness: 1.0, 
+                roughness: 0.2, 
+                emissive: 0x443300,
+                emissiveIntensity: 0.2
+            })
+          )
+          goldTrim.position.set(PAGE_W, 0, 0)
+          mesh.add(goldTrim)
+
           rig.sheets.push({ mesh, front, back, current: 0, index: i - 1 })
         }
 

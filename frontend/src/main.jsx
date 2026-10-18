@@ -1,13 +1,86 @@
-import { StrictMode, createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { createRoot } from 'react-dom/client'
-import { Bell, Bookmark, BookOpen, CalendarDays, Check, ChevronRight, Clock3, Eye, EyeOff, FileText, Flame, Heart, Home, Library, Menu, MessageCircle, PenLine, Plus, Search, Send, Settings2, Sparkles, Users, WandSparkles, X } from 'lucide-react'
-import { gsap } from 'gsap'
-import * as THREE from 'three'
-import { ai, api } from './api'
-import { AIRecommendations, ClubGuide, GenreOrganizer, RootedChat } from './AIWidgets'
-import Book3D from './Book3D'
-import { supabase } from './supabaseClient'
-import './styles.css'
+import { motion, useScroll, useTransform } from 'framer-motion'
+
+const CLUB_THEMES = {
+  spiritual: {
+    bg: 'radial-gradient(circle at 50% 50%, oklch(40% 0.05 55), oklch(20% 0.03 40))',
+    accent: 'oklch(65% 0.15 35)',
+    font: 'font-serif',
+    particle: 'embers'
+  },
+  'sci-fi': {
+    bg: 'radial-gradient(circle at 50% 50%, oklch(30% 0.1 200), oklch(10% 0.03 240))',
+    accent: 'oklch(70% 0.2 200)',
+    font: 'font-mono',
+    particle: 'grid'
+  },
+  mystery: {
+    bg: 'radial-gradient(circle at 50% 50%, oklch(30% 0.02 40), oklch(10% 0.01 30))',
+    accent: 'oklch(50% 0.1 30)',
+    font: 'font-sans',
+    particle: 'rain'
+  },
+  default: {
+    bg: 'radial-gradient(circle at 50% 50%, oklch(40% 0.05 55), oklch(20% 0.03 40))',
+    accent: 'oklch(65% 0.15 35)',
+    font: 'font-serif',
+    particle: 'embers'
+  }
+}
+
+function ClubProfile({ club, onBack, onJoin, joined, author, onUpdate }) {
+  const { scrollYProgress } = useScroll()
+  const bgY = useTransform(scrollYProgress, [0, 1], ['0%', '20%'])
+  const midY = useTransform(scrollYProgress, [0, 1], ['0%', '10%'])
+  
+  const theme = CLUB_THEMES[club.theme] || CLUB_THEMES.default
+
+  return (
+    <div className="parallax-club-container" style={{ background: theme.bg }}>
+      <motion.div style={{ y: bgY }} className="parallax-bg-layer">
+        <div style={{ width: '100%', height: '100%', background: `radial-gradient(circle, ${theme.accent} 0%, transparent 70%)`, opacity: 0.2 }} />
+      </motion.div>
+      
+      <motion.div style={{ y: midY }} className="parallax-mid-layer">
+        <img src={club.image} alt="Club Book" />
+      </motion.div>
+      
+      <div className="parallax-content-layer">
+        <button className="text-button" onClick={onBack} style={{ marginBottom: '24px', color: 'white' }}>
+          <ChevronRight size={16} style={{ transform: 'rotate(180deg)' }} /> Back to clubs
+        </button>
+        
+        <div className="club-glass-card">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '24px' }}>
+            <div>
+              <span className="host-badge">Host: {author}</span>
+              <h1 style={{ color: 'white', fontFamily: 'Playfair Display', fontSize: '42px', marginTop: '12px' }}>{club.title}</h1>
+              <p style={{ color: 'oklch(80% 0.02 80)', fontSize: '16px', marginTop: '8px' }}>Reading {club.book}</p>
+            </div>
+            <button 
+              className="primary-button" 
+              onClick={() => onJoin(club.title)} 
+              disabled={joined}
+              style={{ background: theme.accent, color: 'white' }}
+            >
+              {joined ? 'Joined' : 'Join Circle'}
+            </button>
+          </div>
+          
+          <div className="milestone-track">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+              <span className="eyebrow" style={{ color: 'white', fontSize: '10px' }}>CURRENT MILESTONE</span>
+              <strong style={{ color: 'white', fontSize: '14px' }}>Chapters 1–4: The Call to Silence</strong>
+            </div>
+            <div className="milestone-progress">
+              <div className="milestone-fill" style={{ width: '45%', background: theme.accent }} />
+            </div>
+            <span style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>45%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 const ToastContext = createContext(() => {})
 
@@ -226,6 +299,71 @@ async function handleSubmit(event) {
   )
 }
 
+function StreakParticles() {
+  const canvasRef = useRef(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')
+    let animationFrameId
+    let particles = []
+
+    const resize = () => {
+      canvas.width = canvas.offsetWidth
+      canvas.height = canvas.offsetHeight
+    }
+
+    class Particle {
+      constructor() {
+        this.reset()
+      }
+      reset() {
+        this.x = Math.random() * canvas.width
+        this.y = canvas.height + 10
+        this.size = Math.random() * 2 + 1
+        this.speedY = Math.random() * -1 - 0.5
+        this.speedX = (Math.random() - 0.5) * 0.5
+        this.opacity = Math.random() * 0.5 + 0.2
+        this.life = Math.random() * 100 + 100
+      }
+      update() {
+        this.y += this.speedY
+        this.x += this.speedX
+        this.life--
+        if (this.life <= 0 || this.y < -10) this.reset()
+      }
+      draw() {
+        ctx.fillStyle = `rgba(224, 83, 54, ${this.opacity})`
+        ctx.beginPath()
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2)
+        ctx.fill()
+      }
+    }
+
+    resize()
+    window.addEventListener('resize', resize)
+    particles = Array.from({ length: 30 }, () => new Particle())
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height)
+      particles.forEach(p => {
+        p.update()
+        p.draw()
+      })
+      animationFrameId = requestAnimationFrame(animate)
+    }
+    animate()
+
+    return () => {
+      window.removeEventListener('resize', resize)
+      cancelAnimationFrame(animationFrameId)
+    }
+  }, [])
+
+  return <canvas ref={canvasRef} style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
+}
+
 function App() {
   const [session, setSession] = useState(null)
   const [accountEmail, setAccountEmail] = useState('')
@@ -237,12 +375,13 @@ function App() {
   const [selectedAuthor, setSelectedAuthor] = useState(null)
   const [notice, setNotice] = useState('')
   const [query, setQuery] = useState('')
-  const [books, setBooks] = useStoredState('rooted.books', defaultBooks)
-  const [clubs, setClubs] = useStoredState('rooted.clubs', defaultClubs)
-  const [stories, setStories] = useStoredState('rooted.stories', defaultStories)
+  const [books, setBooks] = useState([])
+  const [clubs, setClubs] = useState([])
+  const [stories, setStories] = useState([])
   const [joinedClubs, setJoinedClubs] = useStoredState('rooted.joined-clubs', [])
   const [readingGoal, setReadingGoal] = useStoredState('rooted.reading-goal', 4)
   const [readingSessions, setReadingSessions] = useStoredState('rooted.reading-sessions', [])
+  const [loadingData, setLoadingData] = useState(true)
   const [previewBook, setPreviewBook] = useState(defaultBooks[0])
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
@@ -252,7 +391,38 @@ function App() {
   const toast = (message) => setNotice(message)
 
   useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoadingData(true)
+        const [booksRes, clubsRes, storiesRes] = await Promise.all([
+          supabase.from('books').select('*'),
+          supabase.from('clubs').select('*'),
+          supabase.from('stories').select('*'),
+        ])
+
+        if (booksRes.error) throw booksRes.error
+        if (clubsRes.error) throw clubsRes.error
+        if (storiesRes.error) throw storiesRes.error
+
+        setBooks(booksRes.data || [])
+        setClubs(clubsRes.data || [])
+        setStories(storiesRes.data || [])
+      } catch (err) {
+        console.error('Error fetching production data:', err)
+        setBooks(defaultBooks)
+        setClubs(defaultClubs)
+        setStories(defaultStories)
+      } finally {
+        setLoadingData(false)
+      }
+    }
+
+    fetchData()
+  }, [])
+  
+  useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+
       if (currentSession) {
         setSession(currentSession.user)
       } else {
@@ -263,6 +433,14 @@ function App() {
   }, [])
 
   if (!session) return <EntryFlow onEnter={setSession} />
+  if (loadingData) return (
+    <div className="app-shell loading-screen">
+      <div className="loading-brand">
+        <span className="brand-mark">R</span> ROOTED
+      </div>
+      <div className="loading-spinner" />
+    </div>
+  )
 
   const handleSaveBook = (title) => {
     setBooks((current) => current.map((book) => book.title === title ? { ...book, saved: !book.saved } : book))
@@ -500,6 +678,7 @@ function App() {
 
           <div className="sidebar-bottom">
             <div className="streak">
+              <StreakParticles />
               <div className="streak-icon">
                 <Flame size={19} />
               </div>
@@ -595,11 +774,13 @@ function App() {
                         <BookCard
                           key={book.title}
                           book={book}
+                          isLoading={loadingData}
                           onSave={() => handleSaveBook(book.title)}
                           onUpdateProgress={handleUpdateProgress}
                           onOpen={(selected) => { setPreviewBook(selected); navigateTo('Preview') }}
                         />
                       ))}
+                      {loadingData && Array.from({ length: 3 }).map((_, i) => <BookCard key={`skeleton-book-${i}`} isLoading={true} />)}
                     </div>
                   </section>
  
@@ -615,17 +796,20 @@ function App() {
                         </button>
                       </div>
  
-                      <div className="club-list">
-                        {clubs.map((club) => (
-                          <ClubCard
-                            key={club.title}
-                            club={club}
-                            onJoin={() => handleJoinClub(club.title)}
-                            onOpen={setSelectedClub}
-                            joined={joinedClubs.includes(club.title)}
-                          />
-                        ))}
-                      </div>
+                       <div className="club-list">
+                         {clubs.map((club) => (
+                           <ClubCard
+                             key={club.title}
+                             club={club}
+                             isLoading={loadingData}
+                             onJoin={() => handleJoinClub(club.title)}
+                             onOpen={setSelectedClub}
+                             joined={joinedClubs.includes(club.title)}
+                           />
+                         ))}
+                         {loadingData && Array.from({ length: 2 }).map((_, i) => <ClubCard key={`skeleton-club-${i}`} isLoading={true} />)}
+                       </div>
+
                     </div>
  
                     <aside className="quote-card">
@@ -712,12 +896,19 @@ function ReadingPulse({ books, clubs, readingGoal, readingSessions, onLogReading
   const sessionsThisWeek = days.reduce((total, day) => total + day.count, 0)
   const currentBook = books.find((book) => Number(book.progress) > 0 && Number(book.progress) < 100)
   const goal = Math.max(1, Number(readingGoal) || 4)
+  const progressPercent = Math.min(100, (sessionsThisWeek / goal) * 100)
 
   return (
     <section className="reading-pulse" aria-labelledby="reading-pulse-title">
       <div className="pulse-heading">
         <div><span className="eyebrow coral">YOUR READING LIFE</span><h2 id="reading-pulse-title">A little time adds up.</h2></div>
-        <span className="pulse-week-label">THIS WEEK</span>
+        <div className="pulse-goal-ring" style={{ position: 'relative', width: 50, height: 50, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <svg width="50" height="50" style={{ transform: 'rotate(-90deg)' }}>
+            <circle cx="25" cy="25" r="22" fill="none" stroke="oklch(88% 0.02 80)" strokeWidth="4" />
+            <circle cx="25" cy="25" r="22" fill="none" stroke="oklch(57% 0.16 35)" strokeWidth="4" strokeDasharray={138} strokeDashoffset={138 - (138 * progressPercent / 100)} strokeLinecap="round" style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+          </svg>
+          <span style={{ position: 'absolute', fontSize: '10px', fontWeight: 700 }}>{Math.round(progressPercent)}%</span>
+        </div>
       </div>
       <div className="pulse-layout">
         <div className="pulse-current-book">
@@ -836,11 +1027,24 @@ function HeroBook3D() {
   return <div ref={mountRef} className="hero-3d" aria-label="Floating three dimensional leather book" />
 }
 
-function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
+function BookCard({ book, onSave, onOpen, onUpdateProgress, isLoading }) {
+  if (isLoading) {
+    return (
+      <article className="book-card">
+        <div className="book-cover skeleton skeleton-card" />
+        <div className="book-info">
+          <div className="skeleton skeleton-text" style={{ width: '70%' }} />
+          <div className="skeleton skeleton-text" style={{ width: '40%' }} />
+          <div className="progress-row">
+            <div className="progress skeleton" />
+            <div className="skeleton" style={{ width: '20px', height: '10px' }} />
+          </div>
+        </div>
+      </article>
+    )
+  }
   const progress = Math.min(100, Math.max(0, Number(book.progress) || 0))
 
-  return (
-    <article className="book-card" onClick={() => onOpen?.(book)}>
       <div className={`book-cover ${book.color}`} style={{ cursor: 'pointer' }}>
         <img src={book.image} alt="" />
         <span className="cover-tag">{book.tag}</span>
@@ -869,7 +1073,20 @@ function BookCard({ book, onSave, onOpen, onUpdateProgress }) {
   )
 }
 
-function ClubCard({ club, onJoin, onOpen, joined = false }) {
+function ClubCard({ club, onJoin, onOpen, joined = false, isLoading }) {
+  if (isLoading) {
+    return (
+      <article className="club-card">
+        <div className="skeleton skeleton-circle" style={{ width: '65px', height: '65px' }} />
+        <div className="club-details">
+          <div className="skeleton skeleton-text" style={{ width: '60px', height: '8px' }} />
+          <div className="skeleton skeleton-text" style={{ width: '120px', height: '16px', marginBottom: '8px' }} />
+          <div className="skeleton skeleton-text" style={{ width: '180px', height: '12px' }} />
+        </div>
+        <div className="skeleton" style={{ width: '60px', height: '30px' }} />
+      </article>
+    )
+  }
   return (
     <article className="club-card">
       <img src={club.image} alt="" onClick={() => onOpen?.(club)} style={{ cursor: 'pointer' }} />
@@ -896,6 +1113,10 @@ function ClubCard({ club, onJoin, onOpen, joined = false }) {
     const [sortBy, setSortBy] = useState('Featured')
   const [suggestOpen, setSuggestOpen] = useState(false)
   const [suggestion, setSuggestion] = useState({ title: '', author: '', reason: '' })
+  
+  const isFounder = books.length === 0
+
+  const handleSuggest = () => {
 
   const handleSuggest = () => {
     const title = suggestion.title.trim()
@@ -997,6 +1218,16 @@ function ClubCard({ club, onJoin, onOpen, joined = false }) {
             onOpen={onOpen} 
           />
         ))}
+        {isFounder && (
+          <div className="founder-empty-state">
+            <div className="founder-icon"><Library size={32} /></div>
+            <h2>Your library is a blank page.</h2>
+            <p>Every great reading life starts with a single book. Suggest your first read to begin your journey.</p>
+            <button className="primary-button" style={{ width: 'auto', marginTop: '20px' }} onClick={() => setSuggestOpen(true)}>
+              Suggest a book <Plus size={16} />
+            </button>
+          </div>
+        )}
       </div>
  
       <AIRecommendations books={books} />
@@ -1057,6 +1288,8 @@ function ClubsView({ clubs = defaultClubs, onJoin, joinedClubs = [], onCreate, o
   const toast = useContext(ToastContext)
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [newClub, setNewClub] = useState({ title: '', book: '' })
+  
+  const isFounder = clubs.length === 0
 
   const handleCreateClub = () => {
     const title = newClub.title.trim()
@@ -1093,6 +1326,16 @@ function ClubsView({ clubs = defaultClubs, onJoin, joinedClubs = [], onCreate, o
         {catalog.map((club, index) => (
           <ClubCard key={`${club.title}-${index}`} club={club} onJoin={() => onJoin(club.title)} onOpen={onOpen} joined={joinedClubs.includes(club.title)} />
         ))}
+        {isFounder && (
+          <div className="founder-empty-state">
+            <div className="founder-icon"><Users size={32} /></div>
+            <h2>No circles yet.</h2>
+            <p>Reading is a solitary act, but understanding is a communal one. Start a new circle and invite others into the conversation.</p>
+            <button className="primary-button" style={{ width: 'auto', marginTop: '20px' }} onClick={() => setShowCreateModal(true)}>
+              Create a club <Plus size={16} />
+            </button>
+          </div>
+        )}
       </div>
  
       <ClubGuide clubs={catalog} />
@@ -1397,6 +1640,23 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
     memberApproval: club.memberApproval ?? true,
   })
   const posts = postsByClub[club.title] || defaultClubDiscussion
+  const [unlockedMilestones, setUnlockedMilestones] = useStoredState(`rooted.unlocked-${club.title}`, [1])
+
+  const milestones = [
+    { id: 1, title: 'Chapters 1–4: The Call to Silence', range: '1-4' },
+    { id: 2, title: 'Chapters 5–8: The Weight of Word', range: '5-8' },
+    { id: 3, title: 'Chapters 9–12: The Narrow Way', range: '9-12' },
+    { id: 4, title: 'The Final Page: Stillness', range: '13+' },
+  ]
+
+  const currentMilestone = milestones.find(m => m.id === Math.max(...unlockedMilestones))
+
+  const unlockMilestone = (id) => {
+    if (!unlockedMilestones.includes(id)) {
+      setUnlockedMilestones(current => [...current, id])
+      toast('New discussion threads unlocked')
+    }
+  }
 
   useEffect(() => {
     setClubBasics({
@@ -1444,7 +1704,7 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
     if (!content) return
     setPostsByClub((current) => ({
       ...current,
-      [club.title]: [{ author, time: 'Just now', text: content, likes: 0 }, ...posts],
+      [club.title]: [{ author, time: 'Just now', text: content, likes: 0, milestone: currentMilestone.id }, ...posts],
     }))
     setMessage('')
     toast('Your note was added to the discussion')
@@ -1510,13 +1770,39 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
         </div>
       )}
 
-      {tab === 'Discussion' && (
-        <section className="club-discussion">
-          <div className="club-section-heading"><div><span className="eyebrow">THE CONVERSATION</span><h2>Leave room for a new thought.</h2></div><span className="club-live-count"><span /> {memberNames.length} readers</span></div>
-          <form className="club-compose" onSubmit={postMessage}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder="Share a passage, question, or reflection..." maxLength={700} aria-label="Write to the club discussion" /><div><span>{message.length}/700</span><button className="primary-button" disabled={!message.trim()}><Send size={15} /> Post reflection</button></div></form>
-          <div className="club-discussion-list">{posts.map((post, index) => <article className="club-discussion-post" key={`${post.author}-${post.time}-${index}`}><span className="avatar small">{post.author.charAt(0)}</span><div className="club-post-content"><div><strong>{post.author}</strong><time>{post.time}</time></div><p>{post.text}</p><button className={post.liked ? 'club-like active' : 'club-like'} onClick={() => toggleLike(index)} aria-label={`Appreciate ${post.author}'s reflection`}><Heart size={14} fill={post.liked ? 'currentColor' : 'none'} /> {post.likes}</button></div></article>)}</div>
-        </section>
-      )}
+       {tab === 'Discussion' && (
+         <section className="club-discussion">
+           <div className="club-section-heading"><div><span className="eyebrow">THE CONVERSATION</span><h2>Leave room for a new thought.</h2></div><span className="club-live-count"><span /> {memberNames.length} readers</span></div>
+           <form className="club-compose" onSubmit={postMessage}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder={`Reflect on ${currentMilestone.title}...`} maxLength={700} aria-label="Write to the club discussion" /><div><span>{message.length}/700</span><button className="primary-button" disabled={!message.trim()}><Send size={15} /> Post reflection</button></div></form>
+           <div className="club-discussion-list">
+             {posts.map((post, index) => {
+               const isLocked = post.milestone && !unlockedMilestones.includes(post.milestone);
+               return (
+                 <article className={`club-discussion-post ${isLocked ? 'locked-post' : ''}`} key={`${post.author}-${post.time}-${index}`}>
+                   <span className="avatar small">{post.author.charAt(0)}</span>
+                   <div className="club-post-content">
+                     <div><strong>{post.author}</strong><time>{post.time}</time></div>
+                     <p style={{ filter: isLocked ? 'blur(6px)' : 'none', opacity: isLocked ? 0.5 : 1, pointerEvents: isLocked ? 'none' : 'auto' }}>{post.text}</p>
+                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                       <button className={post.liked ? 'club-like active' : 'club-like'} onClick={() => toggleLike(index)} aria-label={`Appreciate ${post.author}'s reflection`}><Heart size={14} fill={post.liked ? 'currentColor' : 'none'} /> {post.likes}</button>
+                       {isLocked && <span className="locked-badge">Milestone {post.milestone}</span>}
+                     </div>
+                   </div>
+                 </article>
+               );
+             })}
+           </div>
+           {unlockedMilestones.length < milestones.length && (
+             <div className="milestone-unlocker" style={{ marginTop: '2rem', textAlign: 'center', padding: '20px', background: 'oklch(90% 0.02 80)', borderRadius: '16px', border: '1px dashed oklch(70% 0.05 60)' }}>
+               <p style={{ fontSize: '13px', marginBottom: '12px' }}>Ready for the next part of the journey?</p>
+               <button className="primary-button" onClick={() => unlockMilestone(unlockedMilestones.length + 1)}>
+                 Unlock Milestone {unlockedMilestones.length + 1} <ChevronRight size={16} />
+               </button>
+             </div>
+           )}
+         </section>
+       )}
+
 
       {tab === 'Reading plan' && (
         <section className="club-reading-plan"><div className="club-section-heading"><div><span className="eyebrow">READING TOGETHER</span><h2>A gentle pace, one week at a time.</h2></div><span className="club-plan-status">WEEK 1 OF 4</span></div>
@@ -1909,6 +2195,70 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
   )
 }
 
+function ReadingMomentumWidget({ readingSessions, readingGoal }) {
+  const now = new Date()
+  const monday = new Date(now)
+  monday.setHours(0, 0, 0, 0)
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7))
+  
+  const weekDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(monday)
+    date.setDate(monday.getDate() + index)
+    return {
+      date,
+      count: readingSessions.filter((session) => new Date(session.date).toDateString() === date.toDateString()).length,
+    }
+  })
+  
+  const sessionsThisWeek = weekDays.reduce((total, day) => total + day.count, 0)
+  const goalProgress = Math.min(100, Math.round((sessionsThisWeek / Math.max(1, Number(readingGoal))) * 100))
+
+  return (
+    <section className="momentum-widget">
+      <div className="momentum-heading">
+        <div><span className="eyebrow coral">READING MOMENTUM</span><h2 style={{ fontSize: '20px' }}>Your Weekly Flow</h2></div>
+        <div className="momentum-goal">Goal: <strong style={{ fontSize: '12px' }}>{readingGoal} sessions</strong></div>
+      </div>
+      <div className="momentum-visual">
+        <svg viewBox="0 0 400 100" className="momentum-waveform">
+          <defs>
+            <linearGradient id="waveGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="oklch(57% .16 35)" />
+              <stop offset="100%" stopColor="oklch(74% .1 62)" />
+            </linearGradient>
+          </defs>
+          {weekDays.map((day, i) => {
+            const x = i * 60 + 20
+            const height = day.count * 20 + 10
+            return (
+              <g key={i}>
+                <rect x={x} y={100 - height} width="30" height={height} rx="4" fill="url(#waveGradient)" opacity={0.4 + (day.count * 0.2)}>
+                  <animate attributeName="height" from="0" to={height} dur="0.8s" fill="freeze" />
+                  <animate attributeName="y" from="100" to={100 - height} dur="0.8s" fill="freeze" />
+                </rect>
+                <text x={x + 15} y="95" textAnchor="middle" fontSize="10" fill="oklch(56% .03 55)">
+                  {day.date.toLocaleDateString(undefined, { weekday: 'short' }).slice(0, 1)}
+                </text>
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+      <div className="momentum-footer">
+        <div className="momentum-progress-container">
+          <div className="momentum-progress-bar">
+            <span style={{ width: `${goalProgress}%` }} />
+          </div>
+          <span className="momentum-percentage">{goalProgress}% of weekly goal</span>
+        </div>
+        <div className="momentum-stats">
+          <div className="momentum-stat"><strong style={{ fontSize: '20px' }}>{sessionsThisWeek}</strong><span style={{ fontSize: '10px' }}>sessions</span></div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
 function WriterDashboard({ stories = [], books = [], author, readingGoal, setReadingGoal, readingSessions = [], setReadingSessions, onWrite, onEdit }) {
   const myStories = stories.filter((story) => story.author === author)
   const [selectedBook, setSelectedBook] = useState(books[0]?.title || '')
@@ -1934,11 +2284,12 @@ function WriterDashboard({ stories = [], books = [], author, readingGoal, setRea
   return (
     <div className="view dashboard-view">
       <div className="view-heading">
-        <div><span className="eyebrow coral">YOUR READING DESK</span><h1>A life made of pages.</h1><p>Your reading practice, stories, and next small step.</p></div>
+        <div><span className="eyebrow coral">YOUR READING DESK</span><h1 style={{ textTransform: 'uppercase', letterSpacing: '.1em' }}>A life made of pages.</h1><p>Your reading practice, stories, and next small step.</p></div>
         <button className="primary-button" onClick={onWrite}><PenLine size={16} /> Write a story</button>
       </div>
-
+      <ReadingMomentumWidget readingSessions={readingSessions} readingGoal={readingGoal} />
       <section className="dashboard-goal">
+
         <div className="dashboard-goal-heading"><div><span className="eyebrow">WEEKLY READING RHYTHM</span><h2>Keep a little room for reading.</h2></div><label>Goal <select value={readingGoal} onChange={(event) => setReadingGoal(Number(event.target.value))} aria-label="Weekly reading goal">{[2, 3, 4, 5, 6, 7].map((goal) => <option key={goal} value={goal}>{goal} sessions</option>)}</select></label></div>
         <div className="dashboard-goal-layout">
           <div className="dashboard-week-chart" aria-label={`${sessionsThisWeek} of ${readingGoal} reading sessions this week`}>

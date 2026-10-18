@@ -114,7 +114,8 @@ exports.addStory = (req, res) =>
 
 exports.saveSoulMarker = (req, res) =>
   handle(res, async () => {
-    const { source_text, ai_question, user_reflection, source_type, source_id, user_id } = req.body;
+    const { source_text, ai_question, user_reflection, source_type, source_id } = req.body;
+    const user_id = req.user.id;
     if (!source_text || !ai_question || !user_id) {
       throw Object.assign(new Error('Missing required fields: source_text, ai_question, or user_id.'), { status: 400 });
     }
@@ -136,10 +137,7 @@ exports.saveSoulMarker = (req, res) =>
 
 exports.getSoulMarkers = (req, res) =>
   handle(res, async () => {
-    const { user_id } = req.query;
-    if (!user_id) {
-      throw Object.assign(new Error('user_id is required'), { status: 400 });
-    }
+    const user_id = req.user.id;
     const { data, error } = await supabase
       .from('soul_markers')
       .select('*')
@@ -151,7 +149,8 @@ exports.getSoulMarkers = (req, res) =>
 
 exports.signCovenant = (req, res) =>
   handle(res, async () => {
-    const { user_id, club_id } = req.body;
+    const { club_id } = req.body;
+    const user_id = req.user.id;
     if (!user_id || !club_id) {
       throw Object.assign(new Error('user_id and club_id are required to sign the covenant.'), { status: 400 });
     }
