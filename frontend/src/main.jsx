@@ -1607,8 +1607,8 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
 
     const storyChannel = supabase.channel(`story-edit-${initialStory.title}`)
       .on('broadcast', { event: 'edit' }, ({ payload }) => {
-        if (payload.body !== body) setBody(payload.body);
-        if (payload.title !== title) setTitle(payload.title);
+        if (payload.body !== undefined && payload.body !== body) setBody(payload.body);
+        if (payload.title !== undefined && payload.title !== title) setTitle(payload.title);
       })
       .subscribe();
 
@@ -1617,7 +1617,7 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
     return () => {
       supabase.removeChannel(storyChannel);
     };
-  }, [initialStory?.title]);
+  }, [initialStory?.title, body, title]);
 
   const handleTextChange = (updater, field, value) => {
     updater();
@@ -1701,19 +1701,20 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
             <div className="book-spine" />
             <div className="book-page book-page-left">
               <span className="eyebrow coral">NEW STORY</span>
-              <input
-                className="editor-title"
-                placeholder="Untitled story"
-                value={title}
-                onChange={(event) => handleTextChange(() => setTitle(event.target.value))}
-                autoFocus
-              />
+                <input
+                  className="editor-title"
+                  placeholder="Untitled story"
+                  value={title}
+                  onChange={(event) => handleTextChange(() => setTitle(event.target.value), 'title', event.target.value)}
+                  autoFocus
+                />
+
               <div className="editor-container">
                 <textarea
                   className="editor-body"
                   placeholder={body.trim() ? "Continue writing..." : `Reflection: ${reflectionPrompts[promptIndex].text}`}
                   value={body}
-                  onChange={(event) => handleTextChange(() => setBody(event.target.value))}
+                  onChange={(event) => handleTextChange(() => setBody(event.target.value), 'body', event.target.value)}
                   rows="18"
                 />
                 {!body.trim() && (

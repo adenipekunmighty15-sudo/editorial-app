@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getBooks, addBook, getClubs, addClub, getStories, addStory } = require('../controllers/rootedController');
 const aiController = require('../controllers/aiController');
+const analyticsController = require('../controllers/analyticsController');
 
 // Write endpoints are disabled by default for the public launch (read-only v1).
 // Set ENABLE_WRITES=true to re-enable content creation.
@@ -18,6 +19,8 @@ router.get('/stories', getStories);
 router.post('/stories', writeGuard, addStory);
 router.post('/ai/assist', aiController.assist);
 router.post('/ai/write', aiController.write);
+router.post('/analytics/log', analyticsController.logView);
+router.get('/analytics/stats', analyticsController.getStats);
 router.post('/ai/genre', aiController.analyzeGenre);
 router.post('/ai/recommendations', aiController.recommend);
 router.post('/ai/club-guide', aiController.clubGuide);
