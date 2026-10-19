@@ -1,4 +1,5 @@
 import { motion, useScroll, useTransform } from 'framer-motion'
+import BookPreview2D from './BookPreview2D'
 
 const CLUB_THEMES = {
   spiritual: {
@@ -842,7 +843,13 @@ function App() {
                 <StoriesView books={books} clubs={clubs} stories={stories} author={session.name} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onRead={setReadingStory} onAuthor={setSelectedAuthor} />
               )}
               {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} author={session.name} onRead={setReadingStory} />}
-              {active === 'Preview' && <BookPreview books={books} book={previewBook} onSelect={setPreviewBook} />}
+               {active === 'Preview' && (
+                 <div className="preview-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
+                   <BookPreview2D />
+                   <BookPreview books={books} book={previewBook} onSelect={setPreviewBook} />
+                 </div>
+               )}
+
               {active === 'Dashboard' && <WriterDashboard stories={stories} books={books} author={session.name} readingGoal={readingGoal} setReadingGoal={setReadingGoal} readingSessions={readingSessions} setReadingSessions={setReadingSessions} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onEdit={(story) => { setEditingStory(story); setWriterOpen(true) }} />}
             </>
           )}
