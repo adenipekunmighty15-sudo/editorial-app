@@ -736,7 +736,7 @@ function App() {
                     </div>
  
                     <div className="hero-art">
-                      <HeroBook3D />
+                      <HeroBook2D />
                       <div className="art-label">
                         {dailyVerse.text}
                         <span>{dailyVerse.ref}</span>
@@ -929,102 +929,34 @@ function ReadingPulse({ books, clubs, readingGoal, readingSessions, onLogReading
   )
 }
 
-function HeroBook3D() {
-  const mountRef = useRef(null)
-
-  useLayoutEffect(() => {
-    const mount = mountRef.current
-    if (!mount) return undefined
-
-    const scene = new THREE.Scene()
-    const camera = new THREE.PerspectiveCamera(30, 1, 0.1, 100)
-    camera.position.set(0, 0.15, 5.5)
-
-    const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true })
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    renderer.setClearColor(0x160b08, 0.035)
-    mount.appendChild(renderer.domElement)
-
-    const book = new THREE.Group()
-    book.rotation.set(-0.28, -0.46, -0.12)
-    scene.add(book)
-
-    const leather = new THREE.MeshStandardMaterial({ color: 0x6f3022, roughness: 0.72, metalness: 0.08 })
-    const leatherDark = new THREE.MeshStandardMaterial({ color: 0x3a1e19, roughness: 0.8 })
-    const paper = new THREE.MeshStandardMaterial({ color: 0xe9d5ae, roughness: 0.95 })
-
-    const coverGeometry = new THREE.BoxGeometry(2.55, 0.12, 1.78)
-    const pageGeometry = new THREE.BoxGeometry(2.32, 0.34, 1.58)
-    const coverTop = new THREE.Mesh(coverGeometry, leather)
-    coverTop.position.y = 0.27
-    book.add(coverTop)
-
-    const coverBottom = new THREE.Mesh(coverGeometry, leatherDark)
-    coverBottom.position.y = -0.27
-    book.add(coverBottom)
-
-    const pages = new THREE.Mesh(pageGeometry, paper)
-    book.add(pages)
-
-    const spine = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.7, 1.78), leatherDark)
-    spine.position.x = -1.22
-    book.add(spine)
-
-    const ribbon = new THREE.Mesh(
-      new THREE.BoxGeometry(0.06, 0.07, 1.4),
-      new THREE.MeshStandardMaterial({ color: 0xb54632 }),
-    )
-    ribbon.position.set(0.45, 0.48, 0)
-    ribbon.rotation.z = -0.16
-    book.add(ribbon)
-
-    const light = new THREE.DirectionalLight(0xffe8c6, 4)
-    light.position.set(-3, 4, 5)
-    scene.add(light)
-    scene.add(new THREE.AmbientLight(0x8b5a42, 1.4))
-
-    const pointer = { x: 0, y: 0 }
-    const startedAt = performance.now()
-    let frame = 0
-
-    const resize = () => {
-      const { width, height } = mount.getBoundingClientRect()
-      renderer.setSize(width, height, false)
-      camera.aspect = width / height
-      camera.updateProjectionMatrix()
-    }
-
-    const move = (event) => {
-      const bounds = mount.getBoundingClientRect()
-      pointer.x = ((event.clientX - bounds.left) / bounds.width - 0.5) * 2
-      pointer.y = ((event.clientY - bounds.top) / bounds.height - 0.5) * 2
-    }
-
-    const animate = () => {
-      const elapsed = (performance.now() - startedAt) / 1000
-      book.rotation.y += (pointer.x * 0.22 - book.rotation.y + 0.46) * 0.035
-      book.rotation.x += (pointer.y * -0.12 - book.rotation.x + 0.28) * 0.035
-      book.position.y = Math.sin(elapsed * 1.35) * 0.1
-      ribbon.rotation.z = -0.16 + Math.sin(elapsed) * 0.025
-      renderer.render(scene, camera)
-      frame = requestAnimationFrame(animate)
-    }
-
-    resize()
-    window.addEventListener('resize', resize)
-    mount.addEventListener('pointermove', move)
-    animate()
-
-    return () => {
-      cancelAnimationFrame(frame)
-      window.removeEventListener('resize', resize)
-      mount.removeEventListener('pointermove', move)
-      renderer.dispose()
-      mount.removeChild(renderer.domElement)
-    }
-  }, [])
-
-  return <div ref={mountRef} className="hero-3d" aria-label="Floating three dimensional leather book" />
+function HeroBook2D() {
+  return (
+    <div className="hero-2d-art" style={{ 
+      position: 'relative', 
+      width: '300px', 
+      height: '400px', 
+      display: 'grid', 
+      placeItems: 'center', 
+      zIndex: 1 
+    }}>
+      <div style={{ 
+        width: '200px', 
+        height: '280px', 
+        background: 'oklch(60% .1 40)', 
+        boxShadow: '15px 15px 30px rgba(0,0,0,0.3), inset -5px 0 10px rgba(0,0,0,0.2)', 
+        borderRadius: '4px 12px 12px 4px',
+        position: 'relative',
+        borderLeft: '12px solid oklch(40% .1 30)'
+      }}>
+        <div style={{ 
+          position: 'absolute', 
+          inset: '20px', 
+          border: '1px solid rgba(255,255,255,0.2)', 
+          borderRadius: '2px' 
+        }} />
+      </div>
+    </div>
+  )
 }
 
 function BookCard({ book, onSave, onOpen, onUpdateProgress, isLoading }) {

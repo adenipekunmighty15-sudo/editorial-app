@@ -1,0 +1,258 @@
+import { useState, useMemo, useRef, useCallback, useEffect } from "react";
+import { ChevronLeft, ChevronRight, Edit3, BookOpen, CheckCircle, Sparkles, FileText } from "lucide-react";
+import "./BookPreview.css";
+
+const INITIAL_BOOK = {
+  title: "The Quiet Root",
+  subtitle: "Notes on reading deeply and living fully",
+  author: "Rooted Press",
+  excerpt: [
+    "Before the tree shows anything above the soil, it spends a long season below it. Nobody applauds that season, and nothing in it looks like progress.",
+    "Most of what we call growth begins as patience nobody can see.",
+    "The reader is no different. We arrive at a page carrying the noise of the day, and the first work of reading is simply to be still enough to hear.",
+    "A sentence read slowly can do what a chapter skimmed never will. It can stay with us, and it can take root.",
+    "So take your time here. Turn each page as you would turn the soil: gently, and with the expectation that something is waiting underneath.",
+    "There is no hurry in a garden, and there is none in a good book.",
+    "What you read in the morning is still working on you by evening, long after you have stopped noticing.",
+    "Close the book when you must. The roots keep going.",
+  ].join("\n\n"),
+};
+
+function paginate(source, perPage = 2) {
+  const paras = Array.isArray(source)
+    ? source
+    : String(source || "").split(/\\n{2,}/).map((p) => p.trim()).filter(Boolean);
+  const pages = [];
+  for (let i = 0; i < paras.length; i += perPage) pages.push(paras.slice(i, i + perPage));
+  return pages.length ? pages : [["No preview available yet."]];
+}
+
+const Cross = () => (
+  <svg className="bp-cross" viewBox="0 0 40 60" aria-hidden="true">
+    <path d="M17 2h6v16h14v6H23v34h-6V24H3v-6h14z" fill="currentColor" />
+  </svg>
+);
+
+export default function BookStudio({ initialBook = INITIAL_BOOK, perPage = 2, table = true }) {
+  const [bookData, setBookData] = useState(initialBook);
+  const [activeTab, setActiveTab] = useState("editor"); // "editor" | "preview"
+  const [isPublished, setIsPublished] = useState(false);
+
+  // Book preview state
+  const pages = useMemo(() => paginate(bookData.pages || bookData.excerpt, perPage), [bookData.pages, bookData.excerpt, perPage]);
+  const spreads = Math.ceil(pages.length / 2);
+
+  const [open, setOpen] = useState(false);
+  const [s, setS] = useState(0);
+  const [flip, setFlip] = useState(null);
+  const startX = useRef(null);
+
+  // Word & reading time stats
+  const stats = useMemo(() => {
+    const text = bookData.excerpt || "";
+    const words = text.trim() ? text.trim().split(/\\s+/).length : 0;
+    const readTime = Math.ceil(words / 200); // ~200 wpm
+    return { words, readTime };
+  }, [bookData.excerpt]);
+
+  const go = useCallback(
+    (step) => {
+      if (flip) return;
+      const to = Math.min(Math.max(s + step, 0), spreads - 1);
+      if (to === s) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return setS(to);
+      setFlip({ dir: step > 0 ? "next" : "prev", to, run: false });
+    },
+    [flip, s, spreads]
+  );
+
+  useEffect(() => {
+    if (flip && !flip.run) {
+      const id = requestAnimationFrame(() =>
+        requestAnimationFrame(() => setFlip((f) => f && { ...f, run: true }))
+      );
+      return () => cancelAnimationFrame(id);
+    }
+  }, [flip]);
+
+  const finish = (e) => {
+    if (e.target !== e.currentTarget || !flip) return;
+    setS(flip.to);
+    setFlip(null);
+  };
+
+  const close = () => { setOpen(false); setS(0); setFlip(null); };
+
+  useEffect(() => {
+    if (!open || activeTab !== "preview") return;
+    const onKey = (e) => {
+      if (e.key === "ArrowRight") go(1);
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "Escape") close();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, go, activeTab]);
+
+  const pg = (idx) => {
+    const paras = pages[idx];
+    if (!paras) return <div className="bp-blank" />;
+    return (
+      <>
+        <div className="bp-running"><span>{idx % 2 === 0 ? bookData.author : bookData.title}</span></div>
+        {paras.map((p, i) => <p key={i} className={idx === 0 && i === 0 ? "bp-drop" : undefined}>{p}</p>)}
+        <span className="bp-num">{idx + 1}</span>
+      </>
+    );
+  };
+
+  const t = flip ? flip.to : s;
+  const baseLeft = flip?.dir === "prev" ? t * 2 : s * 2;
+  const baseRight = flip?.dir === "next" ? t * 2 + 1 : s * 2 + 1;
+
+  return (
+    <div className="bp-studio-container">
+      <header className="bp-studio-header">
+        <div className="bp-studio-brand">
+          <Sparkles size={18} className="bp-brand-icon" />
+          <span>Writer's Studio & Publishing Desk</span>
+          {isPublished && <span className="bp-badge-published"><CheckCircle size={14} /> Published</span>}
+        </div>
+        <div className="bp-studio-nav">
+          <button 
+            className={`bp-tab-btn ${activeTab === "editor" ? "active" : ""}`}
+            onClick={() => setActiveTab("editor")}
+          >
+            <Edit3 size={16} /> Writer Editor
+          </button>
+          <button 
+            className={`bp-tab-btn ${activeTab === "preview" ? "active" : ""}`}
+            onClick={() => setActiveTab("preview")}
+          >
+            <BookOpen size={16} /> Book Preview
+          </button>
+        </div>
+      </header>
+
+      {activeTab === "editor" ? (
+        <div className="bp-editor-workspace">
+          <div className="bp-editor-sidebar">
+            <h3>Book Metadata</h3>
+            <div className="bp-field">
+              <label>Book Title</label>
+              <input 
+                type="text" 
+                value={bookData.title} 
+                onChange={(e) => setBookData({ ...bookData, title: e.target.value })} 
+                placeholder="Enter book title..."
+              />
+            </div>
+            <div className="bp-field">
+              <label>Subtitle</label>
+              <input 
+                type="text" 
+                value={bookData.subtitle} 
+                onChange={(e) => setBookData({ ...bookData, subtitle: e.target.value })} 
+                placeholder="Enter subtitle..."
+              />
+            </div>
+            <div className="bp-field">
+              <label>Author / Press</label>
+              <input 
+                type="text" 
+                value={bookData.author} 
+                onChange={(e) => setBookData({ ...bookData, author: e.target.value })} 
+                placeholder="Author name..."
+              />
+            </div>
+
+            <div className="bp-metrics-card">
+              <h4>Draft Metrics</h4>
+              <div className="bp-metric-row"><span>Word Count:</span> <strong>{stats.words} words</strong></div>
+              <div className="bp-metric-row"><span>Est. Read Time:</span> <strong>{stats.readTime} min read</strong></div>
+              <div className="bp-metric-row"><span>Total Spreads:</span> <strong>{spreads} spreads</strong></div>
+            </div>
+
+            <div className="bp-action-group">
+              <button className="bp-btn bp-btn-primary" onClick={() => { setIsPublished(true); setActiveTab("preview"); setOpen(true); }}>
+                {isPublished ? "Update & Preview" : "Publish & Preview Book"}
+              </button>
+            </div>
+          </div>
+
+          <div className="bp-editor-main">
+            <div className="bp-editor-toolbar">
+              <FileText size={18} />
+              <span>Chapter Content (Separate paragraphs with double line breaks)</span>
+            </div>
+            <textarea
+              className="bp-textarea"
+              value={bookData.excerpt}
+              onChange={(e) => setBookData({ ...bookData, excerpt: e.target.value })}
+              placeholder="Write your thoughts here..."
+              rows={16}
+            />
+          </div>
+        </div>
+      ) : (
+        <section className={`bp ${table ? "bp-table" : ""}`} aria-label={`Preview of ${bookData.title}`}>
+          <div
+            className="bp-stage"
+            onPointerDown={(e) => { startX.current = e.clientX; }}
+            onPointerUp={(e) => {
+              if (startX.current == null || !open) return;
+              const dx = e.clientX - startX.current;
+              startX.current = null;
+              if (Math.abs(dx) > 45) go(dx < 0 ? 1 : -1);
+            }}
+          >
+            {!open ? (
+              <button className="bp-closed" onClick={() => setOpen(true)} aria-label={`Open ${bookData.title}`}>
+                <span className="bp-shadow" /><span className="bp-edge" />
+                <span className="bp-cover">
+                  <span className="bp-hinge" />
+                  <span className="bp-frame">
+                    <Cross />
+                    <span className="bp-title">{bookData.title}</span>
+                    <span className="bp-rule" />
+                    <span className="bp-sub">{bookData.subtitle}</span>
+                    <span className="bp-author">{bookData.author}</span>
+                  </span>
+                </span>
+                <span className="bp-ribbon" />
+              </button>
+            ) : (
+              <div className="bp-open">
+                <span className="bp-shadow" /><span className="bp-board" />
+                <div className="bp-spread" aria-live="polite">
+                  <div className="bp-page" onClick={() => go(-1)}>{pg(baseLeft)}</div>
+                  <div className="bp-page" onClick={() => go(1)}>{pg(baseRight)}</div>
+                  {flip && (
+                    <div className={`bp-leaf ${flip.run ? "bp-run" : ""}`} data-dir={flip.dir} onTransitionEnd={finish}>
+                      <div className="bp-face bp-page">{pg(flip.dir === "next" ? s * 2 + 1 : s * 2)}</div>
+                      <div className="bp-face bp-back bp-page">{pg(flip.dir === "next" ? flip.to * 2 : flip.to * 2 + 1)}</div>
+                    </div>
+                  )}
+                </div>
+                <span className="bp-ribbon bp-ribbon-open" />
+              </div>
+            )}
+          </div>
+
+          <div className="bp-controls">
+            {open ? (
+              <>
+                <button className="bp-btn bp-icon" onClick={() => go(-1)} disabled={s === 0 || !!flip} aria-label="Previous pages"><ChevronLeft size={20} /></button>
+                <span className="bp-count">{t + 1} of {spreads}</span>
+                <button className="bp-btn bp-icon" onClick={() => go(1)} disabled={s >= spreads - 1 || !!flip} aria-label="Next pages"><ChevronRight size={20} /></button>
+                <button className="bp-btn" onClick={close}>Close book</button>
+              </>
+            ) : (
+              <button className="bp-btn" onClick={() => setOpen(true)}>Open preview</button>
+            )}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}

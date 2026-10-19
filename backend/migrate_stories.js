@@ -1,4 +1,4 @@
-const supabase = require('./config/supabase');
+    const supabase = require('./config/supabase');
 
 async function migrate() {
   console.log('Starting migration: Creating stories table...');
