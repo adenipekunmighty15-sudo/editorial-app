@@ -35,27 +35,10 @@ import './BookPreview.css'
 
 const ToastContext = createContext(() => {})
 
-const defaultBooks = [
-  { title: 'The Practice of Presence', author: 'John Mark Comer', tag: 'SPIRITUAL FORMATION', image: 'https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=500&q=80', progress: 68, color: 'terracotta' },
-  { title: 'The Ruthless Elimination of Hurry', author: 'John Mark Comer', tag: 'FORMATION', image: 'https://images.unsplash.com/photo-1512820790803-83ca734da794?auto=format&fit=crop&w=500&q=80', progress: 32, color: 'sage' },
-  { title: 'Every Good Endeavor', author: 'Timothy Keller', tag: 'WORK & CALLING', image: 'https://images.unsplash.com/photo-1543002588-bfa74002ed7e?auto=format&fit=crop&w=500&q=80', progress: 12, color: 'plum' },
-]
-
-const defaultClubs = [
-  { title: 'Faith & Fiction', book: 'The Midnight Library', members: '4 / 5', time: 'starts in 2 days', image: 'https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=400&q=80' },
-  { title: 'The Quiet Life', book: 'The Ruthless Elimination of Hurry', members: '5 / 5', time: 'reading now', image: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=400&q=80' },
-]
-
-const defaultStories = [
-  { title: 'On prayer when words fail', author: 'Dami Adeyemi', readTime: 4, likes: 12, excerpt: 'Some prayers are only silence.' },
-  { title: 'A field guide to holy friendship', author: 'Paps O.', readTime: 5, likes: 8, excerpt: 'Friendship as a spiritual discipline.' },
-  { title: 'The table is bigger than we thought', author: 'Ifeoluwa A.', readTime: 6, likes: 21, excerpt: 'On hospitality and belonging.' },
-]
-
-const defaultClubDiscussion = [
-  { author: 'Amara Okafor', time: 'Today · 9:12 AM', text: 'What line from this week stayed with you after you closed the book?', likes: 3 },
-  { author: 'Paps O.', time: 'Yesterday · 6:40 PM', text: 'I noticed how a slower pace changed the way I read this chapter. Curious if anyone else felt that shift.', likes: 2 },
-]
+const defaultBooks = []
+const defaultClubs = []
+const defaultStories = []
+const defaultClubDiscussion = []
 
 const verses = [
   { text: '“Be still, and know.”', ref: 'Psalm 46:10' },
@@ -333,7 +316,7 @@ function App() {
   const [readingGoal, setReadingGoal] = useStoredState('rooted.reading-goal', 4)
   const [readingSessions, setReadingSessions] = useStoredState('rooted.reading-sessions', [])
   const [loadingData, setLoadingData] = useState(true)
-  const [previewBook, setPreviewBook] = useState(defaultBooks[0])
+  const [previewBook, setPreviewBook] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [profileOpen, setProfileOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -360,9 +343,9 @@ function App() {
         setStories(storiesRes.data || [])
       } catch (err) {
         console.error('Error fetching production data:', err)
-        setBooks(defaultBooks)
-        setClubs(defaultClubs)
-        setStories(defaultStories)
+        setBooks([])
+        setClubs([])
+        setStories([])
       } finally {
         setLoadingData(false)
       }
@@ -1013,15 +996,13 @@ function ClubCard({ club, onJoin, onOpen, joined = false, isLoading }) {
       toast('Add a title and author')
       return
     }
-    onSuggest?.({ ...suggestion, title, author, image: defaultBooks[0].image, tag: 'RECOMMENDED', color: 'sage', progress: 0 })
+    onSuggest?.({ ...suggestion, title, author, image: '', tag: 'RECOMMENDED', color: 'sage', progress: 0 })
     setSuggestOpen(false)
     setSuggestion({ title: '', author: '', reason: '' })
     toast('Book added to the library')
   }
  
-  const catalog = books.concat([
-    { ...books[0], title: 'The Cost of Discipleship', author: 'Dietrich Bonhoeffer', color: 'ochre', progress: 0, saved: false, tag: 'NON-FICTION' },
-  ])
+  const catalog = books
  
   const byFilter =
     filter === 'For you'
@@ -1186,7 +1167,7 @@ function ClubsView({ clubs = defaultClubs, onJoin, joinedClubs = [], onCreate, o
       toast('Add a club name and book')
       return
     }
-    onCreate?.({ ...newClub, title, book, members: '1 / 5', time: 'just started', image: defaultClubs[0].image })
+    onCreate?.({ ...newClub, title, book, members: '1 / 5', time: 'just started', image: '' })
     setShowCreateModal(false)
     setNewClub({ title: '', book: '' })
     toast('Your reading club is ready')
@@ -1317,31 +1298,36 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
           </button>
         </div>
  
+        {stories.length > 0 && (() => {
+          const featured = stories[0]
+          const minutes = featured.readTime || featured.read_time
+          return (
         <div className="story-feature">
           <div className="story-image" style={{ position: 'relative', overflow: 'hidden' }}>
              <div className="story-animation-overlay" style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'linear-gradient(45deg, rgba(0,0,0,0.2), transparent)', pointerEvents: 'none' }} />
           </div>
           <div>
-            <span className="eyebrow">FEATURED STORY · 8 MIN READ</span>
-            <h2 onClick={() => onRead(stories.find((story) => story.title === 'The grace of beginning again') || { title: 'The grace of beginning again', author: 'Amara Okafor', excerpt: 'Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.' })} style={{ cursor: 'pointer' }}>The grace of beginning again</h2>
-            <p>“Some seasons ask us to grow quietly. This one taught me that quiet growth is still growth.”</p>
+            <span className="eyebrow">FEATURED STORY{minutes ? ` · ${minutes} MIN READ` : ''}</span>
+            <h2 onClick={() => onRead(featured)} style={{ cursor: 'pointer' }}>{featured.title}</h2>
+            {featured.excerpt && <p>“{featured.excerpt}”</p>}
             <div className="story-author">
-              <span className="avatar small">A</span>
+              <span className="avatar small">{(featured.author || '?').charAt(0)}</span>
               <span>
-                <button className="author-link" onClick={() => onAuthor?.('Amara Okafor')}>Amara Okafor</button>
-                <small>3 days ago · 14 responses</small>
+                <button className="author-link" onClick={() => onAuthor?.(featured.author)}>{featured.author}</button>
               </span>
             </div>
             <button 
               className="primary-button" 
               style={{ marginTop: '1rem', fontSize: '0.8rem' }} 
-              onClick={() => handleSubscribe('Amara Okafor')}
-              disabled={subscribedAuthors.includes('Amara Okafor')}
+              onClick={() => handleSubscribe(featured.author)}
+              disabled={subscribedAuthors.includes(featured.author)}
             >
-              {subscribedAuthors.includes('Amara Okafor') ? 'Subscribed' : 'Subscribe to Author'}
+              {subscribedAuthors.includes(featured.author) ? 'Subscribed' : 'Subscribe to Author'}
             </button>
           </div>
         </div>
+          )
+        })()}
  
         <div className="story-list">
           <div className="story-list-heading">
@@ -1555,7 +1541,7 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
       memberApproval: club.memberApproval ?? true,
     })
   }, [club.title, club.book, club.meeting, club.privacy, club.memberApproval])
-  const memberNames = ['Amara Okafor', 'Paps O.', author, 'Ifeoluwa A.']
+  const memberNames = [author]
 
   const updatePreference = (key, value) => {
     setSettingsByClub((current) => ({
@@ -1652,7 +1638,7 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
         <div className="club-profile-grid">
           <section className="club-overview-copy"><span className="eyebrow">THIS WEEK</span><h2>A small table for good conversation.</h2><p>Read at your own pace, bring a question, and make room for different perspectives. New members can join when a seat opens.</p>
             <div className="club-next-meeting"><CalendarDays size={19} /><div><strong>Next gathering</strong><span>Sunday · 6:30 PM · 45 minutes</span></div><button className="text-button" onClick={() => toast('Meeting added to your reading calendar')}>Add reminder</button></div>
-            <div className="club-activity"><span className="eyebrow">RECENT ACTIVITY</span><p><strong>Amara</strong> added a question to this week's reading.</p><p><strong>Paps</strong> finished the first section.</p></div>
+            
           </section>
           <ClubGuide clubs={[club]} />
         </div>
@@ -1663,6 +1649,7 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
            <div className="club-section-heading"><div><span className="eyebrow">THE CONVERSATION</span><h2>Leave room for a new thought.</h2></div><span className="club-live-count"><span /> {memberNames.length} readers</span></div>
            <form className="club-compose" onSubmit={postMessage}><textarea value={message} onChange={(event) => setMessage(event.target.value)} placeholder={`Reflect on ${currentMilestone.title}...`} maxLength={700} aria-label="Write to the club discussion" /><div><span>{message.length}/700</span><button className="primary-button" disabled={!message.trim()}><Send size={15} /> Post reflection</button></div></form>
            <div className="club-discussion-list">
+             {posts.length === 0 && <p className="empty-note">No reflections yet. Be the first to share one.</p>}
              {posts.map((post, index) => {
                const isLocked = post.milestone && !unlockedMilestones.includes(post.milestone);
                return (
@@ -1700,7 +1687,7 @@ function ClubProfile({ club, onBack, onJoin, joined, onUpdate, author = 'Reader'
 
       {tab === 'Members' && (
         <section className="club-members"><div className="club-section-heading"><div><span className="eyebrow">YOUR READING CIRCLE</span><h2>People around the table.</h2></div><span className="club-live-count"><span /> {memberNames.length} members</span></div>
-          <div className="club-member-grid">{memberNames.map((name, index) => <article className="club-member" key={name}><span className={`avatar member-avatar member-color-${index}`}>{name.charAt(0)}</span><div><strong>{name}</strong><small>{index === 0 ? 'Host' : index === 2 ? 'You' : 'Reader'}</small></div><button className="icon-button" aria-label={`Message ${name}`} onClick={() => { setTab('Discussion'); setMessage(`@${name} `) }}><MessageCircle size={16} /></button></article>)}</div>
+          <div className="club-member-grid">{memberNames.map((name, index) => <article className="club-member" key={name}><span className={`avatar member-avatar member-color-${index}`}>{name.charAt(0)}</span><div><strong>{name}</strong><small>{index === 0 ? 'You' : 'Reader'}</small></div><button className="icon-button" aria-label={`Message ${name}`} onClick={() => { setTab('Discussion'); setMessage(`@${name} `) }}><MessageCircle size={16} /></button></article>)}</div>
         </section>
       )}
     </section>
@@ -1939,11 +1926,11 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
   const [notes, setNotes] = useStoredState('rooted.notes', [])
   const [narrationError, setNarrationError] = useState('')
 
-  const readerPosts = [
-    { title: 'The grace of beginning again', meta: 'Amara Okafor · 8 min read', type: 'Essay' },
-    { title: 'A field guide to holy friendship', meta: 'Paps O. · 5 min read', type: 'Audio' },
-    { title: 'What we carry to the table', meta: 'Dami Adeyemi · 11 min read', type: 'Video' },
-  ]
+  const readerPosts = stories.slice(0, 6).map((story) => ({
+    title: story.title,
+    meta: `${story.author || 'Rooted'} · ${story.readTime || story.read_time || 5} min read`,
+    type: 'Essay',
+  }))
 
   useEffect(() => () => window.speechSynthesis?.cancel(), [])
 
@@ -1992,6 +1979,7 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
             <span className="unread-count">3 unread</span>
           </div>
 
+          {readerPosts.length === 0 && <p className="empty-note">Nothing published yet. Stories will appear here.</p>}
           {readerPosts.map((post) => (
             <article className="feed-post" key={post.title}>
               <div>
@@ -2060,14 +2048,6 @@ function PublicationHub({ books = defaultBooks, stories = defaultStories, clubs 
                <div><strong>{author}</strong><p>{item.content}</p><span>Just now</span></div>
              </div>
            ))}
-           <div className="note-card">
-             <span className="avatar small">A</span>
-             <div>
-               <strong>Amara Okafor</strong>
-               <p>“Some seasons ask us to grow quietly. Quiet growth is still growth.”</p>
-               <span>♡ 24 · 6 replies · 2h</span>
-             </div>
-           </div>
          </div>
        )}
 

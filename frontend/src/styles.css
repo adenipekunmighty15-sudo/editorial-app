@@ -673,3 +673,9 @@ button:not(:disabled):active { transform:scale(.975); }
   outline: none;
   resize: none;
 }
+.empty-note {
+  margin: 1.2rem 0;
+  color: var(--muted, #7a6a58);
+  font-style: italic;
+  text-align: center;
+}

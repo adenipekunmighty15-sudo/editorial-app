@@ -104,9 +104,7 @@ function paginateSource(source, measure, isMobile) {
     }
   })
 
-  if (!toc.length) toc.push({ title: 'Start reading', contentIndex: 0, page: 1 })
-
-  const pages = [...BASE_PAGES, ...body]
+  const pages = [...BASE_PAGES, ...(body.length ? body : [{ type: 'empty' }])]
   if (!isMobile && pages.length % 2) pages.push({ type: 'blank' })
   return { pages, toc, total: body.length }
 }
@@ -658,6 +656,14 @@ export default function BookReader({ book }) {
 }
 
 function PageFace({ page, side, title, author, subtitle, toc, onJump }) {
+  if (page?.type === 'empty') {
+    return (
+      <div className="br-pageface br-pageface--title">
+        <p className="br-subtitle">This book has no text yet.</p>
+      </div>
+    )
+  }
+
   if (!page || page.type === 'blank') return <div className="br-pageface br-pageface--blank" />
 
   if (page.type === 'title') {
@@ -665,7 +671,7 @@ function PageFace({ page, side, title, author, subtitle, toc, onJump }) {
       <div className="br-pageface br-pageface--title">
         <span className="br-eyebrow">R O O T E D</span>
         <h2>{title}</h2>
-        <p className="br-subtitle">{subtitle}</p>
+        {subtitle && <p className="br-subtitle">{subtitle}</p>}
         <span className="br-ornament" aria-hidden="true">❦</span>
         <p className="br-author">{author}</p>
       </div>
@@ -676,6 +682,7 @@ function PageFace({ page, side, title, author, subtitle, toc, onJump }) {
     return (
       <div className="br-pageface br-pageface--toc">
         <h3>Contents</h3>
+        {toc.length === 0 && <p className="br-subtitle">No chapters yet</p>}
         {toc.slice(0, 9).map((item) => (
           <button
             key={`${item.contentIndex}-${item.title}`}
