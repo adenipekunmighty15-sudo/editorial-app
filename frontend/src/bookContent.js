@@ -3,6 +3,59 @@ const BOOK_SUBTITLE = 'A reading edition'
 
 export const BOOK_META = { title: BOOK_TITLE, subtitle: BOOK_SUBTITLE }
 
+export const BOOK_PAGES = Array.from({ length: 24 }, (_, index) => ({
+  body: `${BOOK_TITLE}\n\nDemo page ${index + 1}. Add approved manuscript text here to replace this preview.`,
+}))
+
+function splitIntoPages(text, wordLimit = 70) {
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  if (!words.length) return []
+
+  const pages = []
+  for (let index = 0; index < words.length; index += wordLimit) {
+    pages.push({ body: words.slice(index, index + wordLimit).join(' ') })
+  }
+  return pages
+}
+
+export function buildBookPages(book) {
+  let bodyPages
+  if (Array.isArray(book?.pages) && book.pages.length) {
+    bodyPages = book.pages.map((page) => {
+      const body = typeof page === 'string' ? page : page?.body || page?.content || page?.text || ''
+      return {
+        body: String(body),
+        chapter: typeof page === 'object' ? page.chapter || page.title : '',
+      }
+    }).filter((page) => page.body.trim())
+  } else {
+    const manuscript = book?.content || book?.body
+    bodyPages = typeof manuscript === 'string' && manuscript.trim()
+      ? splitIntoPages(manuscript)
+      : BOOK_PAGES.map((page) => ({ body: page.body }))
+  }
+
+  const toc = bodyPages.map((page, index) => ({
+    chapterIndex: index,
+    title: page.chapter || `Page ${index + 1}`,
+    page: index + 1,
+  }))
+
+  return {
+    pages: [
+      { type: 'title' },
+      { type: 'toc' },
+      ...bodyPages.map((page, index) => ({
+        type: 'body',
+        body: page.body,
+        chapter: page.chapter,
+        number: index + 1,
+      })),
+    ],
+    toc,
+  }
+}
+
 function wrapText(ctx, text, x, y, maxWidth, lineHeight) {
   const paragraphs = text.split('\n')
   let cursorY = y

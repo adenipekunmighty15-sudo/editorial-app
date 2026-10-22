@@ -7,7 +7,6 @@ const rateLimit = require('express-rate-limit');
 const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const { createClient } = require('@supabase/supabase-js');
-const connectDB = require('./config/db');
 const rootedRoutes = require('./routes/rootedRoutes');
 
 dotenv.config();

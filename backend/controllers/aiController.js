@@ -1,4 +1,14 @@
-const axios = require('axios');
+const postJson = async (url, payload, timeoutMs = Number.parseInt(process.env.OLLAMA_TIMEOUT_MS || '120000', 10)) => {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(`Ollama request failed (${response.status})`);
+  return { data };
+};
 
 const assist = async (req, res) => {
   const { text, action } = req.body;
@@ -18,14 +28,14 @@ const assist = async (req, res) => {
   const systemPrompt = prompts[action] || prompts.refine;
 
   try {
-    const response = await axios.post(
+    const response = await postJson(
       process.env.OLLAMA_URL || 'http://localhost:11434/api/generate',
       {
         model: 'llama3',
         prompt: `${systemPrompt}\n\n"${text}"`,
         stream: false,
       },
-      { timeout: 10000 }
+      10000
     );
 
     res.json({ result: response.data.response });
@@ -35,11 +45,35 @@ const assist = async (req, res) => {
   }
 };
 
+const analyzeGenre = async (req, res) => {
+  const { text } = req.body;
+  if (!text) return res.status(400).json({ error: 'Text is required' });
+
+  try {
+    const response = await postJson(
+      process.env.OLLAMA_URL || 'http://127.0.0.1:11434/api/generate',
+      {
+        model: process.env.OLLAMA_MODEL || 'qwen2.5-coder:3b',
+        prompt: `Split this draft into its sections. For each, return a short excerpt, genre, and rationale. Return only a JSON array with objects shaped like {"section":"...","genre":"...","rationale":"..."}.\n\n${text}`,
+        stream: false,
+      }
+    );
+    const result = response.data.response || '[]';
+    const jsonStart = result.indexOf('[');
+    const jsonEnd = result.lastIndexOf(']');
+    if (jsonStart < 0 || jsonEnd < jsonStart) throw new Error('Model returned invalid JSON');
+    res.json({ sections: JSON.parse(result.slice(jsonStart, jsonEnd + 1)) });
+  } catch (error) {
+    console.error('Genre analysis error:', error.message);
+    res.status(500).json({ error: 'Genre analysis is currently unavailable' });
+  }
+};
+
 const chat = async (req, res) => {
   const { message, history, books, stories, clubs } = req.body;
   const context = `Books: ${JSON.stringify(books)}\nStories: ${JSON.stringify(stories)}\nClubs: ${JSON.stringify(clubs)}`;
   try {
-    const response = await axios.post(
+    const response = await postJson(
       process.env.OLLAMA_URL || 'http://localhost:11434/api/generate',
       {
         model: 'llama3',
@@ -56,7 +90,7 @@ const chat = async (req, res) => {
 const pierce = async (req, res) => {
   const { text } = req.body;
   try {
-    const response = await axios.post(
+    const response = await postJson(
       process.env.OLLAMA_URL || 'http://localhost:11434/api/generate',
       {
         model: 'llama3',
@@ -73,7 +107,7 @@ const pierce = async (req, res) => {
 const assignRole = async (req, res) => {
   const { reflections } = req.body;
   try {
-    const response = await axios.post(
+    const response = await postJson(
       process.env.OLLAMA_URL || 'http://localhost:11434/api/generate',
       {
         model: 'llama3',
@@ -90,7 +124,7 @@ const assignRole = async (req, res) => {
 const recommend = async (req, res) => {
   const { preferences, books } = req.body;
   try {
-    const response = await axios.post(
+    const response = await postJson(
       process.env.OLLAMA_URL || 'http://localhost:11434/api/generate',
       {
         model: 'llama3',
@@ -107,7 +141,7 @@ const recommend = async (req, res) => {
 const clubGuide = async (req, res) => {
   const { club, book } = req.body;
   try {
-    const response = await axios.post(
+    const response = await postJson(
       process.env.OLLAMA_URL || 'http://localhost:11434/api/generate',
       {
         model: 'llama3',
@@ -121,4 +155,4 @@ const clubGuide = async (req, res) => {
   }
 };
 
-module.exports = { assist, chat, pierce, assignRole, recommend, clubGuide };
+module.exports = { assist, write: assist, analyzeGenre, chat, pierce, assignRole, recommend, clubGuide };

@@ -1,87 +1,37 @@
-import { motion, useScroll, useTransform } from 'framer-motion'
-import BookPreview2D from './BookPreview2D'
-
-const CLUB_THEMES = {
-  spiritual: {
-    bg: 'radial-gradient(circle at 50% 50%, oklch(40% 0.05 55), oklch(20% 0.03 40))',
-    accent: 'oklch(65% 0.15 35)',
-    font: 'font-serif',
-    particle: 'embers'
-  },
-  'sci-fi': {
-    bg: 'radial-gradient(circle at 50% 50%, oklch(30% 0.1 200), oklch(10% 0.03 240))',
-    accent: 'oklch(70% 0.2 200)',
-    font: 'font-mono',
-    particle: 'grid'
-  },
-  mystery: {
-    bg: 'radial-gradient(circle at 50% 50%, oklch(30% 0.02 40), oklch(10% 0.01 30))',
-    accent: 'oklch(50% 0.1 30)',
-    font: 'font-sans',
-    particle: 'rain'
-  },
-  default: {
-    bg: 'radial-gradient(circle at 50% 50%, oklch(40% 0.05 55), oklch(20% 0.03 40))',
-    accent: 'oklch(65% 0.15 35)',
-    font: 'font-serif',
-    particle: 'embers'
-  }
-}
-
-function ClubProfile({ club, onBack, onJoin, joined, author, onUpdate }) {
-  const { scrollYProgress } = useScroll()
-  const bgY = useTransform(scrollYProgress, [0, 1], ['0%', '20%'])
-  const midY = useTransform(scrollYProgress, [0, 1], ['0%', '10%'])
-  
-  const theme = CLUB_THEMES[club.theme] || CLUB_THEMES.default
-
-  return (
-    <div className="parallax-club-container" style={{ background: theme.bg }}>
-      <motion.div style={{ y: bgY }} className="parallax-bg-layer">
-        <div style={{ width: '100%', height: '100%', background: `radial-gradient(circle, ${theme.accent} 0%, transparent 70%)`, opacity: 0.2 }} />
-      </motion.div>
-      
-      <motion.div style={{ y: midY }} className="parallax-mid-layer">
-        <img src={club.image} alt="Club Book" />
-      </motion.div>
-      
-      <div className="parallax-content-layer">
-        <button className="text-button" onClick={onBack} style={{ marginBottom: '24px', color: 'white' }}>
-          <ChevronRight size={16} style={{ transform: 'rotate(180deg)' }} /> Back to clubs
-        </button>
-        
-        <div className="club-glass-card">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '24px' }}>
-            <div>
-              <span className="host-badge">Host: {author}</span>
-              <h1 style={{ color: 'white', fontFamily: 'Playfair Display', fontSize: '42px', marginTop: '12px' }}>{club.title}</h1>
-              <p style={{ color: 'oklch(80% 0.02 80)', fontSize: '16px', marginTop: '8px' }}>Reading {club.book}</p>
-            </div>
-            <button 
-              className="primary-button" 
-              onClick={() => onJoin(club.title)} 
-              disabled={joined}
-              style={{ background: theme.accent, color: 'white' }}
-            >
-              {joined ? 'Joined' : 'Join Circle'}
-            </button>
-          </div>
-          
-          <div className="milestone-track">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <span className="eyebrow" style={{ color: 'white', fontSize: '10px' }}>CURRENT MILESTONE</span>
-              <strong style={{ color: 'white', fontSize: '14px' }}>Chapters 1–4: The Call to Silence</strong>
-            </div>
-            <div className="milestone-progress">
-              <div className="milestone-fill" style={{ width: '45%', background: theme.accent }} />
-            </div>
-            <span style={{ color: 'white', fontSize: '12px', fontWeight: 600 }}>45%</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
+import { createContext, StrictMode, useContext, useEffect, useRef, useState } from 'react'
+import { createRoot } from 'react-dom/client'
+import {
+  Bookmark,
+  BookOpen,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  Clock3,
+  Eye,
+  EyeOff,
+  FileText,
+  Flame,
+  Heart,
+  Home,
+  Library,
+  Menu,
+  MessageCircle,
+  PenLine,
+  Plus,
+  Search,
+  Send,
+  Settings2,
+  Sparkles,
+  Users,
+  WandSparkles,
+  X,
+} from 'lucide-react'
+import { AIRecommendations, ClubGuide, GenreOrganizer, RootedChat } from './AIWidgets'
+import { api, ai } from './api'
+import BookReader from './BookReader'
+import { supabase } from './supabaseClient'
+import './styles.css'
+import './BookPreview.css'
 
 const ToastContext = createContext(() => {})
 
@@ -845,7 +795,6 @@ function App() {
               {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} author={session.name} onRead={setReadingStory} />}
                {active === 'Preview' && (
                  <div className="preview-container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2rem', padding: '2rem' }}>
-                   <BookPreview2D />
                    <BookPreview books={books} book={previewBook} onSelect={setPreviewBook} />
                  </div>
                )}
@@ -984,6 +933,8 @@ function BookCard({ book, onSave, onOpen, onUpdateProgress, isLoading }) {
   }
   const progress = Math.min(100, Math.max(0, Number(book.progress) || 0))
 
+  return (
+    <article className="book-card" onClick={() => onOpen?.(book)}>
       <div className={`book-cover ${book.color}`} style={{ cursor: 'pointer' }}>
         <img src={book.image} alt="" />
         <span className="cover-tag">{book.tag}</span>
@@ -1054,8 +1005,6 @@ function ClubCard({ club, onJoin, onOpen, joined = false, isLoading }) {
   const [suggestion, setSuggestion] = useState({ title: '', author: '', reason: '' })
   
   const isFounder = books.length === 0
-
-  const handleSuggest = () => {
 
   const handleSuggest = () => {
     const title = suggestion.title.trim()
@@ -2325,16 +2274,16 @@ function BookPreview({ books, book, onSelect }) {
     <section className="book-preview">
       <div className="preview-heading">
         <div>
-          <span className="eyebrow coral">CINEMATIC READING PREVIEW</span>
+          <span className="eyebrow coral">A QUIETER WAY TO READ</span>
           <h1>{selectedBook?.title || 'The old book, reopened.'}</h1>
-          <p>Turn the pages of the finished edition — it reads like the real thing.</p>
+          <p>Open the cover, settle in, and turn a page at your own pace.</p>
         </div>
-        <span className="preview-status">INTERACTIVE 3D EDITION</span>
+        <span className="preview-status">2D BOOK EDITION</span>
       </div>
  
       <PreviewImageRail books={books} onSelect={onSelect} />
  
-      <Book3D book={selectedBook} />
+      <BookReader book={selectedBook} />
     </section>
   )
 }
