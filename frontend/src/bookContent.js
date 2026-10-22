@@ -172,3 +172,56 @@ export function createPageTexture(page, { pageNumber, side = 'right', mirrored =
 
   return canvas
 }
+
+const DEMO_PARAGRAPHS = [
+  'Presence is not something we achieve; it is something we return to. The noise of the day pulls us forward and backward at once, and the quiet work of reading is simply to stop, breathe, and let a single page be enough for the moment.',
+  'A book held in the hands asks for a different kind of attention than a screen scrolled in passing. The weight of the cover, the turn of the leaf, the small ache of reaching the end of a chapter: all of it trains us to stay where we are.',
+  'Begin slowly. Read a line, and then read it again. Notice what rises in you, the resistance and the longing both, and let them sit beside the text without hurrying either one away.',
+  'Faith has always travelled by story. Someone tells it, someone listens, and a thread is passed from one generation to the next. To read well is to take your place in that long line and to receive what was handed down with open hands.',
+]
+
+const DEMO_CHAPTERS = ['The Slow Page', 'Roots and Rhythm', 'A Quiet Table'].map((title, chapterIndex) => ({
+  title,
+  text: Array.from({ length: 6 }, (_, i) => DEMO_PARAGRAPHS[(i + chapterIndex) % DEMO_PARAGRAPHS.length]).join('\n\n'),
+}))
+
+/**
+ * Normalises any book shape into [{ title, text }] chapters.
+ * Markdown-style "# Heading" lines in a manuscript string start new chapters.
+ */
+export function getBookSource(book) {
+  if (Array.isArray(book?.pages) && book.pages.length) {
+    const chapters = []
+    book.pages.forEach((page) => {
+      const body = String(
+        typeof page === 'string' ? page : page?.body || page?.content || page?.text || '',
+      ).trim()
+      if (!body) return
+      const title = typeof page === 'object' ? page.chapter || page.title || '' : ''
+      const last = chapters[chapters.length - 1]
+      if (last && (!title || title === last.title)) last.text += `\n\n${body}`
+      else chapters.push({ title, text: body })
+    })
+    if (chapters.length) return chapters
+  }
+
+  const manuscript = book?.content || book?.body
+  if (typeof manuscript === 'string' && manuscript.trim()) {
+    const chapters = []
+    let current = { title: '', text: '' }
+    manuscript.split('\n').forEach((line) => {
+      const heading = line.match(/^#{1,2}\s+(.+)$/)
+      if (heading) {
+        if (current.text.trim() || current.title) chapters.push(current)
+        current = { title: heading[1].trim(), text: '' }
+      } else {
+        current.text += `${line}\n`
+      }
+    })
+    if (current.text.trim() || current.title) chapters.push(current)
+    const clean = chapters.map((c) => ({ title: c.title, text: c.text.trim() })).filter((c) => c.text)
+    if (clean.length) return clean
+  }
+
+  return DEMO_CHAPTERS
+}

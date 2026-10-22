@@ -615,3 +615,42 @@
     animation-iteration-count: 1 !important;
   }
 }
+
+/* Hidden page used to measure how much text really fits on a page. */
+.br-page--measure {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  left: 0;
+  width: 50%;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.br-page--measure-single { width: 100%; }
+
+.br-menu-kicker--gap { display: block; margin: 22px 0 4px; }
+
+/* Page colours */
+.br-scene[data-theme='paper'] .br-page,
+.br-scene[data-theme='paper'] .br-leaf-face {
+  background: linear-gradient(100deg, #f1e9d6 0%, #fcf8ec 14%, #fffdf6 50%, #fcf8ec 88%, #efe6cf 100%);
+}
+
+.br-scene[data-theme='night'] .br-page,
+.br-scene[data-theme='night'] .br-leaf-face {
+  background: linear-gradient(100deg, #15120f 0%, #211d19 14%, #26211c 50%, #211d19 88%, #14110e 100%);
+}
+
+.br-scene[data-theme='night'] .br-pageface,
+.br-scene[data-theme='night'] .br-toc-row { color: #d9cdb6; }
+
+.br-scene[data-theme='night'] .br-pageface--title h2,
+.br-scene[data-theme='night'] .br-chapter-head,
+.br-scene[data-theme='night'] .br-pageface--toc h3 { color: #ecdfc4; }
+
+.br-scene[data-theme='night'] .br-pageno,
+.br-scene[data-theme='night'] .br-author,
+.br-scene[data-theme='night'] .br-toc-row span:last-child { color: #a8997d; }
+
+.br-scene[data-theme='night'] .br-toc-row:hover { color: #f0b987; }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Bookmark,
   BookOpen,
@@ -6,30 +6,119 @@ import {
   ChevronRight,
   List,
   Minus,
+  Palette,
   Plus,
   X,
 } from 'lucide-react'
-import { BOOK_META, buildBookPages } from './bookContent'
+import { BOOK_META, getBookSource } from './bookContent'
 import './BookReader.css'
 
 const FONT_SIZES = [17, 19, 21, 23, 25]
+const THEMES = ['classic', 'paper', 'night']
+const BASE_PAGES = [{ type: 'title' }, { type: 'toc' }]
 
-function getSavedPosition(key) {
+function readStorage(key, fallback) {
   try {
-    const value = Number(window.localStorage.getItem(key))
-    return Number.isFinite(value) && value >= 0 ? value : 0
+    const value = window.localStorage.getItem(key)
+    return value === null ? fallback : value
   } catch {
-    return 0
+    return fallback
   }
 }
 
-function getSavedBookmarks(key) {
+function writeStorage(key, value) {
   try {
-    const values = JSON.parse(window.localStorage.getItem(key) || '[]')
+    window.localStorage.setItem(key, value)
+  } catch {
+    // Reading keeps working when browser storage is disabled.
+  }
+}
+
+function getSavedOffset(key) {
+  const value = Number(readStorage(key, 0))
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function getSavedMarks(key) {
+  try {
+    const values = JSON.parse(readStorage(key, '[]'))
     return new Set(Array.isArray(values) ? values.filter(Number.isInteger) : [])
   } catch {
     return new Set()
   }
+}
+
+// Lays the manuscript out page by page using the real page size and font, so no
+// text is ever clipped. Positions are tracked as word offsets, which stay valid
+// when the font size or screen size changes the pagination.
+function paginateSource(source, measure, isMobile) {
+  const face = measure.querySelector('.br-pageface')
+  const head = face.querySelector('.br-chapter-head')
+  const textEl = face.querySelector('.br-body-text')
+  const style = window.getComputedStyle(face)
+  const available =
+    face.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+
+  const headHeight = (title) => {
+    head.textContent = title
+    return head.offsetHeight + parseFloat(window.getComputedStyle(head).marginBottom)
+  }
+  const fits = (words, from, count, limit) => {
+    textEl.textContent = words.slice(from, from + count).join(' ')
+    return textEl.offsetHeight <= limit
+  }
+
+  const body = []
+  const toc = []
+  let offset = 0
+
+  source.forEach((chapter) => {
+    const words = chapter.text.trim().split(/[ \t]+/).filter(Boolean)
+    let i = 0
+    let first = true
+    if (chapter.title) {
+      toc.push({ title: chapter.title, contentIndex: body.length, page: body.length + 1 })
+    }
+    while (i < words.length) {
+      const limit = available - (first && chapter.title ? headHeight(chapter.title) : 0)
+      let lo = 1
+      let hi = Math.min(words.length - i, 600)
+      while (lo < hi) {
+        const mid = Math.ceil((lo + hi) / 2)
+        if (fits(words, i, mid, limit)) lo = mid
+        else hi = mid - 1
+      }
+      body.push({
+        type: 'body',
+        body: words.slice(i, i + lo).join(' '),
+        chapter: first ? chapter.title : '',
+        number: body.length + 1,
+        start: offset,
+        end: offset + lo,
+      })
+      offset += lo
+      i += lo
+      first = false
+    }
+  })
+
+  if (!toc.length) toc.push({ title: 'Start reading', contentIndex: 0, page: 1 })
+
+  const pages = [...BASE_PAGES, ...body]
+  if (!isMobile && pages.length % 2) pages.push({ type: 'blank' })
+  return { pages, toc, total: body.length }
+}
+
+function offsetOfSpread(pages, spread, step) {
+  const visible = pages.slice(spread, spread + step).find((page) => page.type === 'body')
+  return visible ? visible.start : 0
+}
+
+function spreadForOffset(pages, offset, isMobile) {
+  if (!offset) return 0
+  let index = pages.findIndex((page) => page.type === 'body' && offset >= page.start && offset < page.end)
+  if (index < 0) index = Math.max(0, pages.length - 1)
+  return isMobile ? index : Math.floor(index / 2) * 2
 }
 
 export default function BookReader({ book }) {
@@ -37,26 +126,35 @@ export default function BookReader({ book }) {
   const author = book?.author || 'Rooted Press'
   const subtitle = book?.subtitle || BOOK_META.subtitle
   const bookKey = String(book?.id || `${title}:${author}`)
-  const positionKey = `rooted-reader-position:${bookKey}`
-  const bookmarkKey = `rooted-reader-bookmarks:${bookKey}`
-  const { pages, toc } = useMemo(() => buildBookPages(book), [book])
+  const offsetKey = `rooted-reader-offset:${bookKey}`
+  const marksKey = `rooted-reader-marks:${bookKey}`
+  const source = useMemo(() => getBookSource(book), [book])
 
   const [fontIndex, setFontIndex] = useState(2)
+  const [theme, setTheme] = useState(() => {
+    const saved = readStorage('rooted-reader-theme', 'classic')
+    return THEMES.includes(saved) ? saved : 'classic'
+  })
   const [opened, setOpened] = useState(false)
   const [coverLifting, setCoverLifting] = useState(false)
-  const [spread, setSpread] = useState(() => getSavedPosition(positionKey))
-  const [loadedPositionKey, setLoadedPositionKey] = useState(positionKey)
+  const [spread, setSpread] = useState(0)
+  const [paged, setPaged] = useState(null)
   const [flipping, setFlipping] = useState(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [isMobile, setIsMobile] = useState(
     () => window.matchMedia?.('(max-width: 680px)').matches ?? false,
   )
-  const [bookmarks, setBookmarks] = useState(() => getSavedBookmarks(bookmarkKey))
+  const [marks, setMarks] = useState(() => getSavedMarks(marksKey))
   const [scale, setScale] = useState(1)
   const bookRef = useRef(null)
+  const measureRef = useRef(null)
   const touchStartX = useRef(null)
   const openTimer = useRef(null)
+  const offsetRef = useRef(getSavedOffset(offsetKey))
 
+  const pages = paged?.pages ?? BASE_PAGES
+  const toc = paged?.toc ?? []
+  const totalBody = paged?.total ?? 0
   const step = isMobile ? 1 : 2
   const maxPosition = Math.max(0, pages.length - step)
   const safeSpread = Math.min(spread, maxPosition)
@@ -65,6 +163,22 @@ export default function BookReader({ book }) {
   const lineHeight = Math.round(fontSize * 1.55)
   const leftPage = isMobile ? null : pages[safeSpread]
   const rightPage = pages[safeSpread + (isMobile ? 0 : 1)]
+  const scaleKey = Math.round(scale * 100)
+
+  const visibleBody = pages
+    .slice(safeSpread, safeSpread + step)
+    .filter((page) => page.type === 'body')
+  const isBookmarked = visibleBody.some((page) =>
+    [...marks].some((offset) => offset >= page.start && offset < page.end),
+  )
+  let pageLabel = 'Title page'
+  if (visibleBody.length) {
+    const first = visibleBody[0].number
+    const last = visibleBody[visibleBody.length - 1].number
+    pageLabel = `Page ${first}${last !== first ? `–${last}` : ''} of ${totalBody}`
+  } else if (pages[safeSpread]?.type === 'toc' || pages[safeSpread + 1]?.type === 'toc') {
+    pageLabel = 'Contents'
+  }
 
   useEffect(() => {
     const query = window.matchMedia('(max-width: 680px)')
@@ -74,25 +188,25 @@ export default function BookReader({ book }) {
     return () => query.removeEventListener?.('change', update)
   }, [])
 
-  useEffect(() => {
-    setSpread(getSavedPosition(positionKey))
-    setBookmarks(getSavedBookmarks(bookmarkKey))
-    setLoadedPositionKey(positionKey)
+  useLayoutEffect(() => {
+    offsetRef.current = getSavedOffset(offsetKey)
+    setMarks(getSavedMarks(marksKey))
     setFlipping(null)
-  }, [positionKey, bookmarkKey])
+  }, [offsetKey, marksKey])
 
   useEffect(() => {
-    setSpread((current) => Math.min(current, maxPosition))
-  }, [maxPosition])
+    writeStorage('rooted-reader-theme', theme)
+  }, [theme])
 
-  useEffect(() => {
-    if (loadedPositionKey !== positionKey) return
-    try {
-      window.localStorage.setItem(positionKey, String(safeSpread))
-    } catch {
-      // Keep reading available when browser storage is disabled.
-    }
-  }, [loadedPositionKey, positionKey, safeSpread])
+  // Re-lay out the book whenever the text size, screen size or manuscript changes,
+  // then return the reader to the same place in the text.
+  useLayoutEffect(() => {
+    if (!opened || !measureRef.current) return
+    const result = paginateSource(source, measureRef.current, isMobile)
+    setPaged(result)
+    setSpread(spreadForOffset(result.pages, offsetRef.current, isMobile))
+    setFlipping(null)
+  }, [opened, source, fontSize, scaleKey, isMobile, offsetKey])
 
   useEffect(() => {
     const element = bookRef.current
@@ -106,15 +220,23 @@ export default function BookReader({ book }) {
 
   useEffect(() => () => window.clearTimeout(openTimer.current), [])
 
+  const moveTo = useCallback(
+    (next) => {
+      const target = Math.max(0, Math.min(next, maxPosition))
+      setSpread(target)
+      const offset = offsetOfSpread(pages, target, step)
+      offsetRef.current = offset
+      writeStorage(offsetKey, String(offset))
+    },
+    [maxPosition, offsetKey, pages, step],
+  )
+
   const finishFlip = useCallback(() => {
     const direction = flipping
     setFlipping(null)
-    if (direction === 'next') {
-      setSpread((current) => Math.min(current + step, maxPosition))
-    } else if (direction === 'prev') {
-      setSpread((current) => Math.max(current - step, 0))
-    }
-  }, [flipping, maxPosition, step])
+    if (direction === 'next') moveTo(safeSpread + step)
+    else if (direction === 'prev') moveTo(safeSpread - step)
+  }, [flipping, moveTo, safeSpread, step])
 
   const goNext = useCallback(() => {
     if (!flipping && safeSpread < maxPosition) setFlipping('next')
@@ -152,30 +274,37 @@ export default function BookReader({ book }) {
   const closeBook = () => {
     setCoverLifting(false)
     setOpened(false)
+    setPaged(null)
     setFlipping(null)
     setMenuOpen(false)
   }
 
   const toggleBookmark = () => {
-    setBookmarks((current) => {
+    if (!visibleBody.length) return
+    setMarks((current) => {
       const next = new Set(current)
-      if (next.has(safeSpread)) next.delete(safeSpread)
-      else next.add(safeSpread)
-      try {
-        window.localStorage.setItem(bookmarkKey, JSON.stringify([...next]))
-      } catch {
-        // Bookmarks remain available for this session.
+      if (isBookmarked) {
+        ;[...next].forEach((offset) => {
+          if (visibleBody.some((page) => offset >= page.start && offset < page.end)) next.delete(offset)
+        })
+      } else {
+        next.add(visibleBody[0].start)
       }
+      writeStorage(marksKey, JSON.stringify([...next]))
       return next
     })
   }
 
   const jumpToPage = (contentPageIndex) => {
-    const pageIndex = contentPageIndex + 2
-    const target = isMobile ? pageIndex : Math.floor(pageIndex / 2) * 2
-    setSpread(Math.min(target, maxPosition))
+    const pageIndex = contentPageIndex + BASE_PAGES.length
+    moveTo(isMobile ? pageIndex : Math.floor(pageIndex / 2) * 2)
     setMenuOpen(false)
   }
+
+  const bookmarkList = [...marks]
+    .sort((x, y) => x - y)
+    .map((offset) => pages.find((page) => page.type === 'body' && offset >= page.start && offset < page.end))
+    .filter(Boolean)
 
   let leafFront = null
   let leafBack = null
@@ -188,11 +317,11 @@ export default function BookReader({ book }) {
   }
 
   const faceProps = { title, author, subtitle, toc, onJump: jumpToPage }
-  const isBookmarked = bookmarks.has(safeSpread)
 
   return (
     <div
       className="br-scene"
+      data-theme={theme}
       onTouchStart={(event) => {
         if (!opened || menuOpen) return
         touchStartX.current = event.touches[0]?.clientX ?? null
@@ -237,6 +366,16 @@ export default function BookReader({ book }) {
             }}
           >
             <div className="br-underlay" />
+            <div
+              className={`br-page br-page--measure ${isMobile ? 'br-page--measure-single' : ''}`}
+              ref={measureRef}
+              aria-hidden="true"
+            >
+              <div className="br-pageface br-pageface--body">
+                <h4 className="br-chapter-head" />
+                <div className="br-body-text" />
+              </div>
+            </div>
             <div className={`br-spread ${isMobile ? 'br-spread--single' : ''}`}>
               <div
                 className={`br-page br-page--left ${flipping === 'prev' || isMobile ? 'br-page--hidden' : ''}`}
@@ -288,6 +427,7 @@ export default function BookReader({ book }) {
             <button
               className={`br-btn ${isBookmarked ? 'br-btn--active' : ''}`}
               onClick={toggleBookmark}
+              disabled={!visibleBody.length}
               aria-label={isBookmarked ? 'Remove bookmark' : 'Bookmark this page'}
               aria-pressed={isBookmarked}
             >
@@ -295,6 +435,13 @@ export default function BookReader({ book }) {
             </button>
             <button className="br-btn" onClick={() => setMenuOpen(true)} aria-label="Open contents">
               <List size={16} />
+            </button>
+            <button
+              className="br-btn"
+              onClick={() => setTheme((current) => THEMES[(THEMES.indexOf(current) + 1) % THEMES.length])}
+              aria-label={`Page colour: ${theme}. Tap to change`}
+            >
+              <Palette size={16} />
             </button>
             <button
               className="br-btn"
@@ -320,7 +467,7 @@ export default function BookReader({ book }) {
               onClick={(event) => {
                 const rect = event.currentTarget.getBoundingClientRect()
                 const ratio = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width))
-                setSpread(Math.round(ratio * maxPosition))
+                moveTo(Math.round((ratio * maxPosition) / step) * step)
               }}
               aria-label={`Reading progress ${Math.round(progress * 100)} percent`}
               title={`${Math.round(progress * 100)}% read`}
@@ -336,7 +483,7 @@ export default function BookReader({ book }) {
               <ChevronRight size={18} />
             </button>
           </div>
-          <p className="br-hint">Tap a page or swipe to turn it · use the arrow keys on a keyboard</p>
+          <p className="br-hint">{pageLabel} · tap a page or swipe to turn it</p>
         </>
       )}
 
@@ -354,14 +501,29 @@ export default function BookReader({ book }) {
             </div>
             {toc.map((item) => (
               <button
-                key={item.chapterIndex}
+                key={`${item.contentIndex}-${item.title}`}
                 className="br-menu-item"
-                onClick={() => jumpToPage(item.chapterIndex)}
+                onClick={() => jumpToPage(item.contentIndex)}
               >
                 <span>{item.title}</span>
                 <span className="br-menu-pg">{item.page}</span>
               </button>
             ))}
+            {bookmarkList.length > 0 && (
+              <>
+                <span className="br-menu-kicker br-menu-kicker--gap">BOOKMARKS</span>
+                {bookmarkList.map((page) => (
+                  <button
+                    key={`mark-${page.start}`}
+                    className="br-menu-item"
+                    onClick={() => jumpToPage(page.number - 1)}
+                  >
+                    <span>{page.chapter || `Page ${page.number}`}</span>
+                    <span className="br-menu-pg">{page.number}</span>
+                  </button>
+                ))}
+              </>
+            )}
           </section>
         </div>
       )}
@@ -388,13 +550,13 @@ function PageFace({ page, side, title, author, subtitle, toc, onJump }) {
     return (
       <div className="br-pageface br-pageface--toc">
         <h3>Contents</h3>
-        {toc.slice(0, 8).map((item) => (
+        {toc.slice(0, 9).map((item) => (
           <button
-            key={item.chapterIndex}
+            key={`${item.contentIndex}-${item.title}`}
             className="br-toc-row"
             onClick={(event) => {
               event.stopPropagation()
-              onJump(item.chapterIndex)
+              onJump(item.contentIndex)
             }}
           >
             <span>{item.title}</span>
