@@ -1408,7 +1408,7 @@ function StoryReader({ story, onBack, onAuthor }) {
     setIsPiercing(true)
     setAiQuestion('')
     try {
-      const result = await api.post('/ai/pierce', { text: selection })
+      const result = await api.post('/api/ai/pierce', { text: selection })
       setAiQuestion(result.question)
     } catch (err) {
       toast('The companion is silent right now. Try again later.')
@@ -1821,7 +1821,7 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
     setAiError('')
     setSuggestion(null)
     try {
-      const result = await api.post('/ai/assist', { action, text: body })
+      const result = await api.post('/api/ai/assist', { action, text: body })
       setSuggestion({ action, text: result.result })
     } catch (error) {
       setAiError(error.message || 'The AI assistant is resting. Try again later.')

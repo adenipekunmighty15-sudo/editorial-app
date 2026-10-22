@@ -9,7 +9,7 @@ const genres = [
 ]
 
 function AIStatus({ busy, error }) {
-  if (busy) return <p className="ai-status" role="status">Working with your local model...</p>
+  if (busy) return <p className="ai-status" role="status">Thinking...</p>
   if (error) return <p className="ai-error" role="alert">{error}</p>
   return null
 }
@@ -41,7 +41,7 @@ export function GenreOrganizer() {
           <h2>Let the story find its shelf.</h2>
           <p>Get a model-based genre and rationale for each section of your draft.</p>
         </div>
-        <span className="ai-badge"><Sparkles size={14} /> LOCAL MODEL</span>
+        <span className="ai-badge"><Sparkles size={14} /> AI</span>
       </div>
 
       <div className="genre-catalog">
@@ -221,7 +221,7 @@ export function RootedChat({ books, stories, clubs }) {
     <div className="ai-chat">
       <div className="feed-header">
         <div><span className="eyebrow coral">ROOTED COMPANION</span><h2>A little help finding your next page.</h2><p>Ask about the books, stories, and clubs in this app.</p></div>
-        <span className="ai-badge"><Sparkles size={14} /> LOCAL MODEL</span>
+        <span className="ai-badge"><Sparkles size={14} /> AI</span>
       </div>
       <div className="ai-chat-messages" aria-live="polite">
         {messages.map((item, index) => <p className={`ai-chat-message ${item.role}`} key={`${item.role}-${index}`}>{item.content}</p>)}

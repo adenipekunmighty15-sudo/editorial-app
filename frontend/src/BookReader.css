@@ -654,3 +654,18 @@
 .br-scene[data-theme='night'] .br-toc-row span:last-child { color: #a8997d; }
 
 .br-scene[data-theme='night'] .br-toc-row:hover { color: #f0b987; }
+
+/* Drag-to-turn */
+.br-spread { touch-action: pan-y; }
+.br-leaf--drag { will-change: transform; }
+.br-leaf--settle { transition: transform .25s ease; }
+
+@keyframes br-flip-next {
+  from { transform: rotateY(var(--br-from, 0deg)); }
+  to { transform: rotateY(-180deg); }
+}
+
+@keyframes br-flip-prev {
+  from { transform: rotateY(var(--br-from, -180deg)); }
+  to { transform: rotateY(0deg); }
+}

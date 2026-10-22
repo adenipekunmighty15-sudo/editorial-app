@@ -8,6 +8,8 @@ import {
   Minus,
   Palette,
   Plus,
+  Volume2,
+  VolumeX,
   X,
 } from 'lucide-react'
 import { BOOK_META, getBookSource } from './bookContent'
@@ -109,6 +111,37 @@ function paginateSource(source, measure, isMobile) {
   return { pages, toc, total: body.length }
 }
 
+let audioCtx = null
+
+// Soft paper rustle, synthesised so no audio file is needed.
+function playPageTurn() {
+  try {
+    const AudioContext = window.AudioContext || window.webkitAudioContext
+    if (!AudioContext) return
+    audioCtx = audioCtx || new AudioContext()
+    if (audioCtx.state === 'suspended') audioCtx.resume()
+    const length = Math.floor(audioCtx.sampleRate * 0.4)
+    const buffer = audioCtx.createBuffer(1, length, audioCtx.sampleRate)
+    const data = buffer.getChannelData(0)
+    for (let i = 0; i < length; i += 1) {
+      const t = i / length
+      data[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * t) ** 2 * (0.5 + 0.5 * Math.random())
+    }
+    const source = audioCtx.createBufferSource()
+    source.buffer = buffer
+    const filter = audioCtx.createBiquadFilter()
+    filter.type = 'bandpass'
+    filter.frequency.value = 2400
+    filter.Q.value = 0.7
+    const gain = audioCtx.createGain()
+    gain.gain.value = 0.22
+    source.connect(filter).connect(gain).connect(audioCtx.destination)
+    source.start()
+  } catch {
+    // Sound is optional.
+  }
+}
+
 function offsetOfSpread(pages, spread, step) {
   const visible = pages.slice(spread, spread + step).find((page) => page.type === 'body')
   return visible ? visible.start : 0
@@ -135,6 +168,10 @@ export default function BookReader({ book }) {
     const saved = readStorage('rooted-reader-theme', 'classic')
     return THEMES.includes(saved) ? saved : 'classic'
   })
+  const [soundOn, setSoundOn] = useState(() => readStorage('rooted-reader-sound', 'on') === 'on')
+  const [drag, setDrag] = useState(null)
+  const [flipFrom, setFlipFrom] = useState(null)
+  const [flipDur, setFlipDur] = useState(0.78)
   const [opened, setOpened] = useState(false)
   const [coverLifting, setCoverLifting] = useState(false)
   const [spread, setSpread] = useState(0)
@@ -148,7 +185,7 @@ export default function BookReader({ book }) {
   const [scale, setScale] = useState(1)
   const bookRef = useRef(null)
   const measureRef = useRef(null)
-  const touchStartX = useRef(null)
+  const dragRef = useRef({ active: false, moved: false })
   const openTimer = useRef(null)
   const offsetRef = useRef(getSavedOffset(offsetKey))
 
@@ -198,6 +235,10 @@ export default function BookReader({ book }) {
     writeStorage('rooted-reader-theme', theme)
   }, [theme])
 
+  useEffect(() => {
+    writeStorage('rooted-reader-sound', soundOn ? 'on' : 'off')
+  }, [soundOn])
+
   // Re-lay out the book whenever the text size, screen size or manuscript changes,
   // then return the reader to the same place in the text.
   useLayoutEffect(() => {
@@ -234,17 +275,26 @@ export default function BookReader({ book }) {
   const finishFlip = useCallback(() => {
     const direction = flipping
     setFlipping(null)
+    setFlipFrom(null)
     if (direction === 'next') moveTo(safeSpread + step)
     else if (direction === 'prev') moveTo(safeSpread - step)
   }, [flipping, moveTo, safeSpread, step])
 
   const goNext = useCallback(() => {
-    if (!flipping && safeSpread < maxPosition) setFlipping('next')
-  }, [flipping, maxPosition, safeSpread])
+    if (flipping || drag || safeSpread >= maxPosition) return
+    setFlipFrom(null)
+    setFlipDur(0.78)
+    setFlipping('next')
+    if (soundOn) playPageTurn()
+  }, [flipping, drag, maxPosition, safeSpread, soundOn])
 
   const goPrev = useCallback(() => {
-    if (!flipping && safeSpread > 0) setFlipping('prev')
-  }, [flipping, safeSpread])
+    if (flipping || drag || safeSpread <= 0) return
+    setFlipFrom(null)
+    setFlipDur(0.78)
+    setFlipping('prev')
+    if (soundOn) playPageTurn()
+  }, [flipping, drag, safeSpread, soundOn])
 
   useEffect(() => {
     if (!opened) return undefined
@@ -306,12 +356,72 @@ export default function BookReader({ book }) {
     .map((offset) => pages.find((page) => page.type === 'body' && offset >= page.start && offset < page.end))
     .filter(Boolean)
 
+  // Drag-to-turn: the page follows the finger, then settles or completes on release.
+  const onPointerDown = (event) => {
+    if (!opened || menuOpen || flipping || drag || event.button > 0) return
+    if (event.target.closest?.('button')) return
+    dragRef.current = {
+      active: true,
+      moved: false,
+      dir: null,
+      p: 0,
+      x: event.clientX,
+      width: event.currentTarget.getBoundingClientRect().width / (isMobile ? 1 : 2),
+    }
+  }
+
+  const onPointerMove = (event) => {
+    const d = dragRef.current
+    if (!d.active) return
+    const dx = event.clientX - d.x
+    if (!d.dir) {
+      if (Math.abs(dx) < 8) return
+      const dir = dx < 0 ? 'next' : 'prev'
+      if ((dir === 'next' && safeSpread >= maxPosition) || (dir === 'prev' && safeSpread <= 0)) {
+        d.active = false
+        return
+      }
+      d.dir = dir
+      d.moved = true
+      event.currentTarget.setPointerCapture?.(event.pointerId)
+    }
+    const raw = d.dir === 'next' ? -dx : dx
+    d.p = Math.max(0, Math.min(1, raw / d.width))
+    setDrag({ dir: d.dir, p: d.p })
+  }
+
+  const onPointerUp = () => {
+    const d = dragRef.current
+    if (!d.active) return
+    d.active = false
+    if (!d.dir) return
+    if (d.p > 0.3) {
+      setFlipFrom(d.dir === 'next' ? -180 * d.p : -180 * (1 - d.p))
+      setFlipDur(Math.max(0.25, 0.78 * (1 - d.p)))
+      setDrag(null)
+      setFlipping(d.dir)
+      if (soundOn) playPageTurn()
+    } else {
+      setDrag({ dir: d.dir, p: 0, settling: true })
+      window.setTimeout(() => setDrag(null), 260)
+    }
+  }
+
+  const swallowClickAfterDrag = (handler) => () => {
+    if (dragRef.current.moved) {
+      dragRef.current.moved = false
+      return
+    }
+    handler()
+  }
+
+  const turning = flipping || drag?.dir || null
   let leafFront = null
   let leafBack = null
-  if (flipping === 'next') {
+  if (turning === 'next') {
     leafFront = pages[safeSpread + (isMobile ? 0 : 1)]
     leafBack = pages[safeSpread + step]
-  } else if (flipping === 'prev') {
+  } else if (turning === 'prev') {
     leafFront = pages[safeSpread]
     leafBack = pages[safeSpread - 1]
   }
@@ -322,17 +432,6 @@ export default function BookReader({ book }) {
     <div
       className="br-scene"
       data-theme={theme}
-      onTouchStart={(event) => {
-        if (!opened || menuOpen) return
-        touchStartX.current = event.touches[0]?.clientX ?? null
-      }}
-      onTouchEnd={(event) => {
-        if (touchStartX.current === null) return
-        const distance = event.changedTouches[0].clientX - touchStartX.current
-        touchStartX.current = null
-        if (distance < -45) goNext()
-        else if (distance > 45) goPrev()
-      }}
     >
       {!opened ? (
         <button
@@ -376,10 +475,16 @@ export default function BookReader({ book }) {
                 <div className="br-body-text" />
               </div>
             </div>
-            <div className={`br-spread ${isMobile ? 'br-spread--single' : ''}`}>
+            <div
+              className={`br-spread ${isMobile ? 'br-spread--single' : ''}`}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+            >
               <div
-                className={`br-page br-page--left ${flipping === 'prev' || isMobile ? 'br-page--hidden' : ''}`}
-                onClick={goPrev}
+                className={`br-page br-page--left ${turning === 'prev' || isMobile ? 'br-page--hidden' : ''}`}
+                onClick={swallowClickAfterDrag(goPrev)}
                 role="button"
                 tabIndex={0}
                 aria-label="Turn to the previous page"
@@ -388,8 +493,8 @@ export default function BookReader({ book }) {
                 <PageFace page={leftPage} side="left" {...faceProps} />
               </div>
               <div
-                className={`br-page br-page--right ${flipping === 'next' ? 'br-page--hidden' : ''}`}
-                onClick={goNext}
+                className={`br-page br-page--right ${turning === 'next' ? 'br-page--hidden' : ''}`}
+                onClick={swallowClickAfterDrag(goNext)}
                 role="button"
                 tabIndex={0}
                 aria-label="Turn to the next page"
@@ -399,10 +504,23 @@ export default function BookReader({ book }) {
                 {isBookmarked && <span className="br-ribbon" aria-label="Bookmarked" />}
               </div>
               <span className="br-gutter" aria-hidden="true" />
-              {flipping && (
+              {turning && (
                 <div
-                  className={`br-leaf br-leaf--${flipping} ${isMobile ? 'br-leaf--single' : ''}`}
-                  onAnimationEnd={finishFlip}
+                  className={`br-leaf ${flipping ? `br-leaf--${flipping}` : 'br-leaf--drag'} ${
+                    drag?.settling ? 'br-leaf--settle' : ''
+                  } ${isMobile ? 'br-leaf--single' : ''}`}
+                  style={
+                    flipping
+                      ? flipFrom !== null
+                        ? { '--br-from': `${flipFrom}deg`, animationDuration: `${flipDur}s` }
+                        : undefined
+                      : {
+                          transform: `rotateY(${
+                            drag.dir === 'next' ? -180 * drag.p : -180 * (1 - drag.p)
+                          }deg)`,
+                        }
+                  }
+                  onAnimationEnd={flipping ? finishFlip : undefined}
                   aria-hidden="true"
                 >
                   <div className="br-leaf-face br-leaf-front">
@@ -445,6 +563,14 @@ export default function BookReader({ book }) {
             </button>
             <button
               className="br-btn"
+              onClick={() => setSoundOn((on) => !on)}
+              aria-pressed={soundOn}
+              aria-label={soundOn ? 'Turn page sound off' : 'Turn page sound on'}
+            >
+              {soundOn ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
+            <button
+              className="br-btn"
               onClick={() => setFontIndex((index) => Math.max(0, index - 1))}
               disabled={fontIndex === 0}
               aria-label="Decrease text size"
@@ -483,7 +609,7 @@ export default function BookReader({ book }) {
               <ChevronRight size={18} />
             </button>
           </div>
-          <p className="br-hint">{pageLabel} · tap a page or swipe to turn it</p>
+          <p className="br-hint">{pageLabel} · tap, swipe or drag a page to turn it</p>
         </>
       )}
 
