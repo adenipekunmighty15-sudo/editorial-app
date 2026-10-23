@@ -1,12 +1,24 @@
+import { supabase } from './supabaseClient'
+
 // In production the API is served from the same origin (single-service deploy),
 // so the base URL is empty by default. During local dev, set VITE_API_URL in
 // frontend/.env to point at the backend (e.g. http://localhost:5000).
 const baseURL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
 
+async function authHeader() {
+  try {
+    const { data } = await supabase.auth.getSession()
+    const token = data?.session?.access_token
+    return token ? { Authorization: `Bearer ${token}` } : {}
+  } catch {
+    return {}
+  }
+}
+
 async function request(path, options = {}) {
   const response = await fetch(`${baseURL}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...(await authHeader()), ...options.headers },
   })
 
   if (!response.ok) {

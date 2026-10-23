@@ -4,32 +4,14 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
-const mongoose = require('mongoose');
 const dotenv = require('dotenv');
-const { createClient } = require('@supabase/supabase-js');
 const rootedRoutes = require('./routes/rootedRoutes');
 
 dotenv.config();
-// connectDB(); // MongoDB connection removed in favor of Supabase
 
 const app = express();
 
 app.set('trust proxy', 1);
-
-const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-const authenticate = async (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader) return res.status(401).json({ error: 'No authorization header' });
-
-  const token = authHeader.replace('Bearer ', '');
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-
-  if (error || !user) return res.status(401).json({ error: 'Invalid or expired token' });
-
-  req.user = user;
-  next();
-};
 
 app.use(
   helmet({
@@ -72,22 +54,15 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-const dbStates = ['disconnected', 'connected', 'connecting', 'disconnecting'];
-
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    db: dbStates[mongoose.connection.readyState] || 'unknown',
+    ai: require('./services/llm').provider(),
     uptime: Math.round(process.uptime()),
   });
 });
 
-app.use('/api', apiLimiter, (req, res, next) => {
-  // Attach the authenticate middleware to specific routes via rootedRoutes, 
-  // but we can also define it here if we wanted global auth.
-  // For now, we'll pass it to the routes.
-  next();
-}, rootedRoutes);
+app.use('/api', apiLimiter, rootedRoutes);
 
 const clientDir = path.join(__dirname, '..', 'frontend', 'dist');
 const hasClient = fs.existsSync(clientDir);

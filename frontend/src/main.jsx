@@ -1,4 +1,4 @@
-import { createContext, StrictMode, useContext, useEffect, useRef, useState } from 'react'
+import { Component, createContext, StrictMode, useContext, useEffect, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Bookmark,
@@ -1410,7 +1410,7 @@ function StoryReader({ story, onBack, onAuthor }) {
       const user = supabase.auth.getUser()
       const { data: { user: currentUser } } = await user
       
-      await api.post('/soul-markers', {
+      await api.post('/api/soul-markers', {
         user_id: currentUser?.id,
         source_text: selection,
         ai_question: aiQuestion,
@@ -1707,7 +1707,7 @@ function SoulMap() {
       try {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) throw new Error('You must be signed in to view your soul map.')
-        const result = await api.get(`/soul-markers?user_id=${user.id}`)
+        const result = await api.get('/api/soul-markers')
         setMarkers(result.markers || [])
       } catch (err) {
         setError(err.message)
@@ -2268,8 +2268,35 @@ function BookPreview({ books, book, onSelect }) {
   )
 }
 
+class ErrorBoundary extends Component {
+  state = { failed: false }
+
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+
+  componentDidCatch(error) {
+    console.error('App crashed:', error)
+  }
+
+  render() {
+    if (!this.state.failed) return this.props.children
+    return (
+      <div role="alert" style={{ padding: '15vh 24px', textAlign: 'center', fontFamily: 'Georgia, serif' }}>
+        <h2>Something went wrong.</h2>
+        <p style={{ margin: '12px 0 20px', color: '#777' }}>Please reload the page. Your reading progress is saved.</p>
+        <button className="primary-button" style={{ width: 'auto', margin: '0 auto' }} onClick={() => window.location.reload()}>
+          Reload
+        </button>
+      </div>
+    )
+  }
+}
+
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
