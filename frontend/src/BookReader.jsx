@@ -500,7 +500,6 @@ export default function BookReader({ book }) {
                 <PageFace page={rightPage} side="right" {...faceProps} />
                 {isBookmarked && <span className="br-ribbon" aria-label="Bookmarked" />}
               </div>
-              <span className="br-gutter" aria-hidden="true" />
               {turning && (
                 <div
                   className={`br-leaf ${flipping ? `br-leaf--${flipping}` : 'br-leaf--drag'} ${

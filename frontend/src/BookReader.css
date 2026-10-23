@@ -205,17 +205,6 @@
 
 .br-page--hidden { visibility: hidden; }
 
-.br-gutter {
-  position: absolute;
-  z-index: 3;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 42px;
-  pointer-events: none;
-  transform: translateX(-50%);
-  background: linear-gradient(90deg, transparent, rgba(70, 45, 15, .3) 46%, rgba(40, 24, 8, .42) 50%, rgba(70, 45, 15, .3) 54%, transparent);
-}
 
 .br-leaf {
   position: absolute;
