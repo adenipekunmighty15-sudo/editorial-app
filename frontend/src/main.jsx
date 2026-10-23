@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import {
   Bookmark,
   BookOpen,
+  Feather,
   CalendarDays,
   Check,
   ChevronRight,
@@ -27,7 +28,8 @@ import {
   X,
 } from 'lucide-react'
 import { AIRecommendations, ClubGuide, GenreOrganizer, RootedChat } from './AIWidgets'
-import { api, ai } from './api'
+import { api, ai, writer as writerApi, library as libraryApi } from './api'
+import WritersView from './Writers'
 import BookReader from './BookReader'
 import { supabase } from './supabaseClient'
 import './styles.css'
@@ -340,7 +342,7 @@ function App() {
 
         setBooks(booksRes.data || [])
         setClubs(clubsRes.data || [])
-        setStories(storiesRes.data || [])
+        setStories((storiesRes.data || []).filter((story) => story.status !== 'draft'))
       } catch (err) {
         console.error('Error fetching production data:', err)
         setBooks([])
@@ -366,6 +368,22 @@ function App() {
     return () => subscription.unsubscribe()
   }, [])
 
+  const [writersVersion, setWritersVersion] = useState(0)
+  const reportError = (error) => toast(error?.message || 'Something went wrong. Please try again.')
+
+  // Restore what this reader saved on the server (progress, saved books, clubs).
+  const libraryLoaded = useRef(false)
+  useEffect(() => {
+    if (!session || loadingData || libraryLoaded.current) return
+    libraryLoaded.current = true
+    libraryApi.mine().then((saved) => {
+      const shelf = new Map(saved.books.map((item) => [item.title, item]))
+      setBooks((current) => current.map((book) => (shelf.has(book.title) ? { ...book, ...shelf.get(book.title) } : book)))
+      setJoinedClubs((current) => Array.from(new Set([...current, ...saved.joinedClubs])))
+    }).catch(() => {})
+  }, [session, loadingData]) // eslint-disable-line react-hooks/exhaustive-deps
+
+
   if (!session) return <EntryFlow onEnter={setSession} />
   if (loadingData) return (
     <div className="app-shell loading-screen">
@@ -376,19 +394,29 @@ function App() {
     </div>
   )
 
+  const refreshStories = async () => {
+    const { data, error } = await supabase.from('stories').select('*').order('created_at', { ascending: false })
+    if (!error) setStories((data || []).filter((story) => story.status !== 'draft'))
+    setWritersVersion((current) => current + 1)
+  }
+
   const handleSaveBook = (title) => {
     setBooks((current) => current.map((book) => book.title === title ? { ...book, saved: !book.saved } : book))
-    toast('Library updated')
+    api.toggleBookSave(title).then(() => toast('Library updated')).catch(reportError)
   }
 
   const handleUpdateProgress = (title, progress) => {
     setBooks((current) => current.map((book) => book.title === title ? { ...book, progress } : book))
+    api.updateBookProgress(title, progress).catch(() => {})
   }
 
   const handleJoinClub = (title) => {
     if (joinedClubs.includes(title)) return
     setJoinedClubs((current) => [...current, title])
-    toast(`Request sent to ${title}`)
+    api.joinClub(title).then(() => toast(`Request sent to ${title}`)).catch((error) => {
+      setJoinedClubs((current) => current.filter((name) => name !== title))
+      reportError(error)
+    })
   }
 
   const saveSettings = () => {
@@ -420,6 +448,7 @@ function App() {
     { label: 'Library', icon: Library },
     { label: 'Book clubs', icon: Users },
     { label: 'Stories', icon: PenLine },
+    { label: 'Writers', icon: Feather },
     { label: 'Discover', icon: Sparkles },
     { label: 'Preview', icon: BookOpen },
     { label: 'Dashboard', icon: FileText },
@@ -759,7 +788,11 @@ function App() {
                   onSave={(title) => handleSaveBook(title)} 
                   onUpdateProgress={handleUpdateProgress}
                   searchQuery={query}
-                  onSuggest={(book) => setBooks((current) => [book, ...current])}
+                  onSuggest={(book) => {
+                    setBooks((current) => [book, ...current])
+                    api.addBook({ title: book.title, author: book.author, tag: book.tag, image: book.image, color: book.color })
+                      .catch((error) => { setBooks((current) => current.filter((item) => item !== book)); reportError(error) })
+                  }}
                   onOpen={(book) => { setPreviewBook(book); navigateTo('Preview') }}
                 />
               )}
@@ -768,12 +801,26 @@ function App() {
                   clubs={clubs}
                   onJoin={handleJoinClub}
                   joinedClubs={joinedClubs}
-                  onCreate={(club) => setClubs((current) => [club, ...current])}
+                  onCreate={(club) => {
+                    setClubs((current) => [club, ...current])
+                    api.addClub({ title: club.title, book: club.book, members: club.members, time: club.time, image: club.image })
+                      .catch((error) => { setClubs((current) => current.filter((item) => item !== club)); reportError(error) })
+                  }}
                   onOpen={setSelectedClub}
                 />
               )}
               {active === 'Stories' && (
                 <StoriesView books={books} clubs={clubs} stories={stories} author={session.name} onWrite={() => { setEditingStory(null); setWriterOpen(true) }} onRead={setReadingStory} onAuthor={setSelectedAuthor} />
+              )}
+              {active === 'Writers' && (
+                <WritersView
+                  defaultName={session.name || session.user_metadata?.name || session.email?.split('@')[0] || ''}
+                  version={writersVersion}
+                  toast={toast}
+                  onWrite={() => { setEditingStory(null); setWriterOpen(true) }}
+                  onEdit={(story) => { setEditingStory(story); setWriterOpen(true) }}
+                  onChanged={refreshStories}
+                />
               )}
               {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} author={session.name} onRead={setReadingStory} />}
                {active === 'Preview' && (
@@ -793,22 +840,24 @@ function App() {
           initialStory={editingStory}
           onClose={() => { setWriterOpen(false); setEditingStory(null) }}
           onAssist={(input) => ai.write(input)}
-          onPublish={({ title, body }) => {
-            setWriterOpen(false)
+          onPublish={async ({ title, body, status = 'published' }) => {
             const currentStory = editingStory
-            setEditingStory(null)
-            const readTime = Math.max(1, Math.round(body.split(/\s+/).length / 200))
-            const story = {
-              title: title || 'Untitled story',
-              author: session.name,
-              content: body,
-              excerpt: body.slice(0, 140),
-              readTime,
+            const payload = { title: title.trim(), content: body, status }
+            try {
+              if (currentStory?.id) await writerApi.update(currentStory.id, payload)
+              else await writerApi.create(payload)
+              setWriterOpen(false)
+              setEditingStory(null)
+              await refreshStories()
+              toast(status === 'draft' ? 'Draft saved' : currentStory ? 'Story updated' : 'Story published')
+              if (status === 'draft') navigateTo('Writers')
+            } catch (error) {
+              toast(error.message)
+              if (/join the writers/i.test(error.message)) {
+                setWriterOpen(false)
+                navigateTo('Writers')
+              }
             }
-            setStories((current) => currentStory
-              ? current.map((item) => item.title === currentStory.title ? { ...item, ...story } : item)
-              : [{ ...story, likes: 0 }, ...current])
-            toast(currentStory ? 'Story updated' : 'Story published')
           }}
         />
       )}
@@ -1261,6 +1310,7 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
 
   const handleLike = (title) => {
     const story = stories.find((item) => item.title === title)
+    api.likeStory(title).catch((error) => toast(error.message))
     setStoryLikes((current) => {
       const liked = Boolean(current[title]?.liked)
       const count = current[title]?.count ?? story?.likes ?? 0
@@ -1271,7 +1321,10 @@ function StoriesView({ books = defaultBooks, clubs = defaultClubs, stories = def
   const handleSubscribe = (author) => {
     if (subscribedAuthors.includes(author)) return
     setSubscribedAuthors((current) => [...current, author])
-    toast(`Subscribed to ${author}`)
+    api.subscribeToAuthor(author).then(() => toast(`Subscribed to ${author}`)).catch((error) => {
+      setSubscribedAuthors((current) => current.filter((name) => name !== author))
+      toast(error.message)
+    })
   }
 
   const visibleStories = stories.filter((story) => {
@@ -1836,9 +1889,12 @@ function WriterModal({ initialStory, onClose, onPublish, onAssist }) {
           </button>
           <span className="writer-brand">ROOTED / WRITE</span>
           <span className="writer-save-state">{isSaving ? 'Saving...' : 'Saved privately'}</span>
-          <button className="primary-button" onClick={() => onPublish({ title, body })}>
+          <button className="text-button" onClick={() => onPublish({ title, body, status: 'draft' })}>
+            Save draft
+          </button>
+          <button className="primary-button" onClick={() => onPublish({ title, body, status: 'published' })}>
             <Send size={16} />
-            Publish draft
+            Publish
           </button>
         </div>
 

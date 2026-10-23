@@ -39,6 +39,14 @@ Real values go in `.env` files or your host's dashboard — never in the repo.
 | `VITE_API_URL` | frontend | Backend URL in local dev |
 | `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` | frontend | Public Supabase client settings |
 
+## Database setup (run once)
+
+In Supabase open **SQL Editor -> New query**, paste the contents of `supabase/001_writers_and_persistence.sql` and run it. It adds writer profiles, drafts/published stories, saved books, club membership, likes, notes and subscriptions, and locks tables so the public anon key can only read public content. Writes go through the backend, so `SUPABASE_SERVICE_ROLE_KEY` must be set on the server.
+
+## Writers
+
+The **Writers** tab lets any signed-in reader join the writers, write stories, save drafts, publish, edit and delete their own stories, and see their stats. Content creation is on by default; set `ENABLE_WRITES=false` to pause it.
+
 ## Deploying to Render
 
 `render.yaml` defines a single web service that builds the frontend and serves it from the API. Create a Blueprint from the repo, then fill in the secret variables in the Render dashboard.

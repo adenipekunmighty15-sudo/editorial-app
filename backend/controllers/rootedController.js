@@ -1,12 +1,6 @@
 const supabase = require('../config/supabase');
 
-const { textField } = require('./aiController');
-
-const handle = (res, fn) =>
-  fn().catch((error) => {
-    console.error('Controller Error:', error);
-    return res.status(error.status || 500).json({ error: error.message || 'Server error' });
-  });
+const { textField, handle } = require('../utils/validate');
 
 const paginate = (req, defaultLimit = 20, maxLimit = 50) => {
   const page = Math.max(1, parseInt(req.query.page || '1', 10));
@@ -39,19 +33,6 @@ const validateClub = (body) => ({
   is_reading_now: Boolean(body.is_reading_now),
 });
 
-const validateStory = (body) => ({
-  title: textField(body.title, 'Title', 180),
-  author: textField(body.author, 'Author', 140),
-  content: textField(body.content || '', 'Content', 50000, false),
-  excerpt: textField(body.excerpt || '', 'Excerpt', 500, false),
-  readTime: (() => {
-    const r = Number(body.readTime);
-    if (!Number.isFinite(r) || r < 1) return 5;
-    return r;
-  })(),
-  featured: Boolean(body.featured),
-});
-
 exports.getBooks = (req, res) =>
   handle(res, async () => {
     const { page, limit, offset } = paginate(req);
@@ -66,7 +47,7 @@ exports.getBooks = (req, res) =>
 
 exports.addBook = (req, res) =>
   handle(res, async () => {
-    const book = validateBook(req.body);
+    const book = { ...validateBook(req.body), user_id: req.user.id, published: false };
     const { data, error } = await supabase.from('books').insert([book]).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -86,7 +67,7 @@ exports.getClubs = (req, res) =>
 
 exports.addClub = (req, res) =>
   handle(res, async () => {
-    const club = validateClub(req.body);
+    const club = { ...validateClub(req.body), user_id: req.user.id };
     const { data, error } = await supabase.from('clubs').insert([club]).select().single();
     if (error) throw error;
     res.status(201).json(data);
@@ -98,18 +79,11 @@ exports.getStories = (req, res) =>
     const { data, error, count } = await supabase
       .from('stories')
       .select('*', { count: 'exact' })
+      .eq('status', 'published')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
     if (error) throw error;
     res.json({ stories: data, page, limit, total: count ?? 0 });
-  });
-
-exports.addStory = (req, res) =>
-  handle(res, async () => {
-    const story = validateStory(req.body);
-    const { data, error } = await supabase.from('stories').insert([story]).select().single();
-    if (error) throw error;
-    res.status(201).json(data);
   });
 
 exports.saveSoulMarker = (req, res) =>

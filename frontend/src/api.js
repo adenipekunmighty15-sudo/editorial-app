@@ -58,6 +58,21 @@ export const api = {
   getMyStories: () => request('/api/writer/stories'),
 }
 
+export const writer = {
+  profile: () => request('/api/writer/profile'),
+  join: (input) => request('/api/writer/profile', { method: 'POST', body: JSON.stringify(input) }),
+  stories: () => request('/api/writer/stories'),
+  stats: () => request('/api/writer/stats'),
+  directory: () => request('/api/writers'),
+  create: (story) => request('/api/writer/stories', { method: 'POST', body: JSON.stringify(story) }),
+  update: (id, story) => request(`/api/writer/stories/${id}`, { method: 'PATCH', body: JSON.stringify(story) }),
+  remove: (id) => request(`/api/writer/stories/${id}`, { method: 'DELETE' }),
+}
+
+export const library = {
+  mine: () => request('/api/me/library'),
+}
+
 export const ai = {
   write: (input) => request('/api/ai/write', { method: 'POST', body: JSON.stringify(input) }),
   analyzeGenre: (input) => request('/api/ai/genre', { method: 'POST', body: JSON.stringify(input) }),

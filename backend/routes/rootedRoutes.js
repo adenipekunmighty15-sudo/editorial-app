@@ -1,8 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { getBooks, addBook, getClubs, addClub, getStories, addStory, saveSoulMarker, getSoulMarkers, signCovenant } = require('../controllers/rootedController');
+const { getBooks, addBook, getClubs, addClub, getStories, saveSoulMarker, getSoulMarkers, signCovenant } = require('../controllers/rootedController');
 const aiController = require('../controllers/aiController');
 const analyticsController = require('../controllers/analyticsController');
+const library = require('../controllers/libraryController');
+const writer = require('../controllers/writerController');
 const rateLimit = require('express-rate-limit');
 const { authenticate } = require('../middleware/auth');
 
@@ -16,11 +18,10 @@ const aiLimiter = rateLimit({
   message: { error: 'You are going a little fast. Please wait a minute and try again.' },
 });
 
-// Write endpoints are disabled by default for the public launch (read-only v1).
-// Set ENABLE_WRITES=true to re-enable content creation.
+// Content creation is on by default. Set ENABLE_WRITES=false to pause it (read-only mode).
 const writeGuard = (req, res, next) => {
-  if (process.env.ENABLE_WRITES === 'true') return next();
-  res.status(403).json({ error: 'Content creation is currently disabled.' });
+  if (process.env.ENABLE_WRITES !== 'false') return next();
+  res.status(403).json({ error: 'Content creation is paused right now.' });
 };
 
 router.get('/books', getBooks);
@@ -28,7 +29,26 @@ router.post('/books', writeGuard, authenticate, addBook);
 router.get('/clubs', getClubs);
 router.post('/clubs', writeGuard, authenticate, addClub);
 router.get('/stories', getStories);
-router.post('/stories', writeGuard, authenticate, addStory);
+
+// Reader library: progress, saved books, clubs, likes, notes, subscriptions
+router.get('/me/library', authenticate, library.getMyLibrary);
+router.patch('/books/:title/progress', authenticate, library.setProgress);
+router.post('/books/:title/save', authenticate, library.toggleSave);
+router.post('/clubs/:title/join', authenticate, library.joinClub);
+router.post('/stories/:title/like', authenticate, library.likeStory);
+router.post('/notes', authenticate, library.postNote);
+router.post('/subscriptions', authenticate, library.subscribe);
+router.get('/subscriptions', authenticate, library.getSubscriptions);
+
+// Writers
+router.get('/writers', writer.listWriters);
+router.get('/writer/profile', authenticate, writer.getWriterProfile);
+router.post('/writer/profile', writeGuard, authenticate, writer.saveWriterProfile);
+router.get('/writer/stories', authenticate, writer.getMyStories);
+router.post('/writer/stories', writeGuard, authenticate, writer.createStory);
+router.patch('/writer/stories/:id', writeGuard, authenticate, writer.updateStory);
+router.delete('/writer/stories/:id', writeGuard, authenticate, writer.deleteStory);
+router.get('/writer/stats', authenticate, writer.getWriterStats);
 router.use('/ai', authenticate, aiLimiter);
 router.post('/ai/assist', aiController.assist);
 router.post('/ai/write', aiController.write);

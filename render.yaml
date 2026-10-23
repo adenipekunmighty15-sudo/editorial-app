@@ -10,7 +10,7 @@ services:
       - key: NODE_ENV
         value: production
       - key: ENABLE_WRITES
-        value: "false"
+        value: "true"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_ANON_KEY
