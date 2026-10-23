@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Bookmark,
-  BookOpen,
   ChevronLeft,
   ChevronRight,
   List,
@@ -15,8 +14,8 @@ import {
 import { BOOK_META, getBookSource } from './bookContent'
 import './BookReader.css'
 
-const FONT_SIZES = [17, 19, 21, 23, 25]
-const THEMES = ['classic', 'paper', 'night']
+const FONT_SIZES = [14, 15.5, 17, 19, 21]
+const THEMES = ['classic', 'sepia', 'night']
 const BASE_PAGES = [{ type: 'title' }, { type: 'toc' }]
 
 function readStorage(key, fallback) {
@@ -55,18 +54,41 @@ function getSavedMarks(key) {
 // when the font size or screen size changes the pagination.
 function paginateSource(source, measure, isMobile) {
   const face = measure.querySelector('.br-pageface')
+  const header = face.querySelector('.br-page-header')
   const head = face.querySelector('.br-chapter-head')
   const textEl = face.querySelector('.br-body-text')
-  const style = window.getComputedStyle(face)
+  const footer = face.querySelector('.br-page-footer')
+  const outer = (el) => {
+    const css = window.getComputedStyle(el)
+    return el.offsetHeight + parseFloat(css.marginTop) + parseFloat(css.marginBottom)
+  }
+  const faceStyle = window.getComputedStyle(face)
   const available =
-    face.clientHeight - parseFloat(style.paddingTop) - parseFloat(style.paddingBottom)
+    face.clientHeight -
+    parseFloat(faceStyle.paddingTop) -
+    parseFloat(faceStyle.paddingBottom) -
+    outer(header) -
+    outer(footer) -
+    parseFloat(window.getComputedStyle(textEl).marginTop) -
+    2
 
   const headHeight = (title) => {
     head.textContent = title
-    return head.offsetHeight + parseFloat(window.getComputedStyle(head).marginBottom)
+    return outer(head)
   }
-  const fits = (words, from, count, limit) => {
-    textEl.textContent = words.slice(from, from + count).join(' ')
+  const fits = (words, from, count, limit, dropCap) => {
+    const paragraphs = words
+      .slice(from, from + count)
+      .join(' ')
+      .split(/\n\s*\n/)
+      .filter((text) => text.trim())
+      .map((text) => {
+        const node = document.createElement('p')
+        node.textContent = text.trim()
+        return node
+      })
+    textEl.classList.toggle('br-drop-cap', dropCap)
+    textEl.replaceChildren(...paragraphs)
     return textEl.offsetHeight <= limit
   }
 
@@ -82,18 +104,20 @@ function paginateSource(source, measure, isMobile) {
       toc.push({ title: chapter.title, contentIndex: body.length, page: body.length + 1 })
     }
     while (i < words.length) {
-      const limit = available - (first && chapter.title ? headHeight(chapter.title) : 0)
+      const opening = first && Boolean(chapter.title)
+      const limit = available - (opening ? headHeight(chapter.title) : 0)
       let lo = 1
       let hi = Math.min(words.length - i, 600)
       while (lo < hi) {
         const mid = Math.ceil((lo + hi) / 2)
-        if (fits(words, i, mid, limit)) lo = mid
+        if (fits(words, i, mid, limit, opening)) lo = mid
         else hi = mid - 1
       }
       body.push({
         type: 'body',
         body: words.slice(i, i + lo).join(' '),
         chapter: first ? chapter.title : '',
+        chapterTitle: chapter.title,
         number: body.length + 1,
         start: offset,
         end: offset + lo,
@@ -170,8 +194,8 @@ export default function BookReader({ book }) {
   const [drag, setDrag] = useState(null)
   const [flipFrom, setFlipFrom] = useState(null)
   const [flipDur, setFlipDur] = useState(0.78)
-  const [opened, setOpened] = useState(false)
-  const [coverLifting, setCoverLifting] = useState(false)
+  const opened = true // the book opens straight to the pages
+  const [fontsTick, setFontsTick] = useState(0)
   const [spread, setSpread] = useState(0)
   const [paged, setPaged] = useState(null)
   const [flipping, setFlipping] = useState(null)
@@ -184,7 +208,6 @@ export default function BookReader({ book }) {
   const bookRef = useRef(null)
   const measureRef = useRef(null)
   const dragRef = useRef({ active: false, moved: false })
-  const openTimer = useRef(null)
   const offsetRef = useRef(getSavedOffset(offsetKey))
 
   const pages = paged?.pages ?? BASE_PAGES
@@ -195,7 +218,7 @@ export default function BookReader({ book }) {
   const safeSpread = Math.min(spread, maxPosition)
   const progress = maxPosition ? safeSpread / maxPosition : 0
   const fontSize = FONT_SIZES[fontIndex]
-  const lineHeight = Math.round(fontSize * 1.55)
+  const lineHeight = Math.round(fontSize * 1.75 * 10) / 10
   const leftPage = isMobile ? null : pages[safeSpread]
   const rightPage = pages[safeSpread + (isMobile ? 0 : 1)]
   const scaleKey = Math.round(scale * 100)
@@ -245,7 +268,10 @@ export default function BookReader({ book }) {
     setPaged(result)
     setSpread(spreadForOffset(result.pages, offsetRef.current, isMobile))
     setFlipping(null)
-  }, [opened, source, fontSize, scaleKey, isMobile, offsetKey])
+    if (document.fonts?.status === 'loading') {
+      document.fonts.ready.then(() => setFontsTick((tick) => tick + 1))
+    }
+  }, [opened, source, fontSize, scaleKey, isMobile, offsetKey, fontsTick])
 
   useEffect(() => {
     const element = bookRef.current
@@ -256,8 +282,6 @@ export default function BookReader({ book }) {
     observer.observe(element)
     return () => observer.disconnect()
   }, [opened])
-
-  useEffect(() => () => window.clearTimeout(openTimer.current), [])
 
   const moveTo = useCallback(
     (next) => {
@@ -312,20 +336,6 @@ export default function BookReader({ book }) {
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [opened, goNext, goPrev])
-
-  const openCover = () => {
-    if (coverLifting) return
-    setCoverLifting(true)
-    openTimer.current = window.setTimeout(() => setOpened(true), 620)
-  }
-
-  const closeBook = () => {
-    setCoverLifting(false)
-    setOpened(false)
-    setPaged(null)
-    setFlipping(null)
-    setMenuOpen(false)
-  }
 
   const toggleBookmark = () => {
     if (!visibleBody.length) return
@@ -431,27 +441,6 @@ export default function BookReader({ book }) {
       className="br-scene"
       data-theme={theme}
     >
-      {!opened ? (
-        <button
-          type="button"
-          className={`br-closed-book ${coverLifting ? 'br-closed-book--lifted' : ''}`}
-          onClick={openCover}
-          aria-label={`Open ${title}`}
-        >
-          <span className="br-closed-pages" aria-hidden="true" />
-          <span className="br-closed-cover">
-            <span className="br-closed-frame">
-              <span className="br-closed-eyebrow">R O O T E D</span>
-              <span className="br-closed-emblem">R</span>
-              <span className="br-closed-title">{title}</span>
-              <span className="br-closed-sub">{subtitle}</span>
-              <span className="br-closed-rule" />
-              <span className="br-closed-author">{author}</span>
-            </span>
-          </span>
-          <span className="br-open-hint"><BookOpen size={16} /> Tap to open</span>
-        </button>
-      ) : (
         <>
           <div
             className="br-book"
@@ -468,8 +457,10 @@ export default function BookReader({ book }) {
               aria-hidden="true"
             >
               <div className="br-pageface br-pageface--body">
+                <header className="br-page-header"><span>M</span><span>M</span></header>
                 <h4 className="br-chapter-head" />
                 <div className="br-body-text" />
+                <footer className="br-page-footer"><span className="br-pageno">0</span></footer>
               </div>
             </div>
             <div
@@ -500,6 +491,7 @@ export default function BookReader({ book }) {
                 <PageFace page={rightPage} side="right" {...faceProps} />
                 {isBookmarked && <span className="br-ribbon" aria-label="Bookmarked" />}
               </div>
+              {!isMobile && <span className="br-gutter" aria-hidden="true" />}
               {turning && (
                 <div
                   className={`br-leaf ${flipping ? `br-leaf--${flipping}` : 'br-leaf--drag'} ${
@@ -579,9 +571,6 @@ export default function BookReader({ book }) {
             >
               <Plus size={16} />
             </button>
-            <button className="br-btn" onClick={closeBook} aria-label="Close book">
-              <X size={16} />
-            </button>
             <button
               className="br-progress"
               onClick={(event) => {
@@ -605,7 +594,6 @@ export default function BookReader({ book }) {
           </div>
           <p className="br-hint">{pageLabel} · tap, swipe or drag a page to turn it</p>
         </>
-      )}
 
       {menuOpen && (
         <div className="br-menu" onClick={() => setMenuOpen(false)}>
@@ -697,11 +685,26 @@ function PageFace({ page, side, title, author, subtitle, toc, onJump }) {
     )
   }
 
+  const leftSide = side === 'left'
+  const running = page.chapterTitle || ''
   return (
     <div className="br-pageface br-pageface--body">
+      <header className="br-page-header">
+        <span>{leftSide ? title : running}</span>
+        <span>{leftSide ? running : title}</span>
+      </header>
       {page.chapter && <h4 className="br-chapter-head">{page.chapter}</h4>}
-      <div className="br-body-text">{page.body}</div>
-      <span className={`br-pageno br-pageno--${side}`}>{page.number}</span>
+      <div className={`br-body-text ${page.chapter ? 'br-drop-cap' : ''}`}>
+        {page.body
+          .split(/\n\s*\n/)
+          .filter((text) => text.trim())
+          .map((text, index) => (
+            <p key={index}>{text.trim()}</p>
+          ))}
+      </div>
+      <footer className={`br-page-footer br-page-footer--${side}`}>
+        <span className="br-pageno">{page.number}</span>
+      </footer>
     </div>
   )
 }
