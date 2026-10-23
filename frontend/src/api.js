@@ -69,6 +69,35 @@ export const writer = {
   remove: (id) => request(`/api/writer/stories/${id}`, { method: 'DELETE' }),
 }
 
+const json = (method, body) => ({ method, body: JSON.stringify(body) })
+
+export const studio = {
+  myBooks: () => request('/api/my/books'),
+  createBook: (book) => request('/api/my/books', json('POST', book)),
+  updateBook: (id, book) => request(`/api/my/books/${id}`, json('PATCH', book)),
+  deleteBook: (id) => request(`/api/my/books/${id}`, { method: 'DELETE' }),
+  chapters: (bookId) => request(`/api/books/${bookId}/chapters`),
+  addChapter: (bookId, chapter) => request(`/api/my/books/${bookId}/chapters`, json('POST', chapter)),
+  updateChapter: (id, chapter) => request(`/api/my/chapters/${id}`, json('PATCH', chapter)),
+  deleteChapter: (id) => request(`/api/my/chapters/${id}`, { method: 'DELETE' }),
+  moveChapter: (id, direction) => request(`/api/my/chapters/${id}/move`, json('POST', { direction })),
+}
+
+export const COVER_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+export const COVER_MAX_BYTES = 2 * 1024 * 1024
+
+// Uploads a cover image to Supabase Storage via a one-time URL from the backend.
+export async function uploadCover(file) {
+  if (!COVER_TYPES.includes(file.type)) throw new Error('Covers must be JPG, PNG or WebP images.')
+  if (file.size > COVER_MAX_BYTES) throw new Error('Covers must be 2 MB or smaller.')
+  const signed = await request('/api/uploads/cover', json('POST', { contentType: file.type }))
+  const { error } = await supabase.storage
+    .from('covers')
+    .uploadToSignedUrl(signed.path, signed.token, file, { contentType: file.type })
+  if (error) throw new Error(error.message || 'Cover upload failed.')
+  return signed.publicUrl
+}
+
 export const library = {
   mine: () => request('/api/me/library'),
 }

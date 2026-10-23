@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Feather, PenLine, Trash2, Send, Pencil, Users } from 'lucide-react'
 import { writer } from './api'
+import BookStudio from './BookStudio'
 import './Writers.css'
 
-export default function WritersView({ defaultName = '', onWrite, onEdit, onChanged, toast, version }) {
+export default function WritersView({ defaultName = '', onWrite, onEdit, onChanged, onBooksChanged, toast, version }) {
   const [state, setState] = useState({ loading: true, isWriter: false, profile: null })
   const [stats, setStats] = useState(null)
   const [mine, setMine] = useState([])
@@ -148,6 +149,8 @@ export default function WritersView({ defaultName = '', onWrite, onEdit, onChang
               </article>
             ))}
           </div>
+
+          <BookStudio defaultAuthor={state.profile?.name || defaultName} toast={toast} onChanged={onBooksChanged} />
         </>
       )}
 

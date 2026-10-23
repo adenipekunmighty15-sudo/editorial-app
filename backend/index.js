@@ -21,7 +21,13 @@ app.use(
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
         fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-        imgSrc: ["'self'", 'data:', 'blob:', 'https://images.unsplash.com'],
+        imgSrc: [
+          "'self'",
+          'data:',
+          'blob:',
+          'https://images.unsplash.com',
+          process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).origin : '',
+        ].filter(Boolean),
         connectSrc: [
           "'self'",
           process.env.SUPABASE_URL ? new URL(process.env.SUPABASE_URL).origin : '',

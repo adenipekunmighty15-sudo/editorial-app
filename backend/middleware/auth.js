@@ -26,3 +26,19 @@ const authenticate = async (req, res, next) => {
 };
 
 module.exports = { authenticate };
+
+// Like authenticate, but anonymous visitors are allowed through (req.user stays unset).
+const optionalAuth = async (req, res, next) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7).trim() : '';
+  if (!token) return next();
+  try {
+    const { data } = await getClient().auth.getUser(token);
+    if (data?.user) req.user = data.user;
+  } catch (err) {
+    console.error('Optional auth failed:', err.message);
+  }
+  return next();
+};
+
+module.exports.optionalAuth = optionalAuth;

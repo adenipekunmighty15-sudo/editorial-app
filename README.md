@@ -49,6 +49,10 @@ Or from your own computer: put your database URI in `backend/.env` as `SUPABASE_
 
 The **Writers** tab lets any signed-in reader join the writers, write stories, save drafts, publish, edit and delete their own stories, and see their stats. Content creation is on by default; set `ENABLE_WRITES=false` to pause it.
 
+## Books, chapters and covers
+
+Writers create books under **Writers -> My books**: add details and a cover (uploaded to Supabase Storage), write chapters, reorder them, then publish. Readers only see published books, and the reader shows the chapters as real pages. Run `supabase/003_chapters_and_covers.sql` once to enable this.
+
 ## Deploying to Render
 
 `render.yaml` defines a single web service that builds the frontend and serves it from the API. Create a Blueprint from the repo, then fill in the secret variables in the Render dashboard.

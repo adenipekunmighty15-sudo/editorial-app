@@ -6,7 +6,8 @@ const analyticsController = require('../controllers/analyticsController');
 const library = require('../controllers/libraryController');
 const writer = require('../controllers/writerController');
 const rateLimit = require('express-rate-limit');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuth } = require('../middleware/auth');
+const studio = require('../controllers/bookStudioController');
 
 // AI calls cost money: require sign-in and keep a tight per-user limit.
 const aiLimiter = rateLimit({
@@ -49,6 +50,17 @@ router.post('/writer/stories', writeGuard, authenticate, writer.createStory);
 router.patch('/writer/stories/:id', writeGuard, authenticate, writer.updateStory);
 router.delete('/writer/stories/:id', writeGuard, authenticate, writer.deleteStory);
 router.get('/writer/stats', authenticate, writer.getWriterStats);
+// Book studio: authors manage books, chapters and covers; readers read published chapters.
+router.get('/books/:id/chapters', optionalAuth, studio.getChapters);
+router.get('/my/books', authenticate, studio.listMyBooks);
+router.post('/my/books', writeGuard, authenticate, studio.createMyBook);
+router.patch('/my/books/:id', writeGuard, authenticate, studio.updateMyBook);
+router.delete('/my/books/:id', writeGuard, authenticate, studio.deleteMyBook);
+router.post('/my/books/:id/chapters', writeGuard, authenticate, studio.addChapter);
+router.patch('/my/chapters/:id', writeGuard, authenticate, studio.updateChapter);
+router.delete('/my/chapters/:id', writeGuard, authenticate, studio.deleteChapter);
+router.post('/my/chapters/:id/move', writeGuard, authenticate, studio.moveChapter);
+router.post('/uploads/cover', writeGuard, authenticate, studio.signCoverUpload);
 router.use('/ai', authenticate, aiLimiter);
 router.post('/ai/assist', aiController.assist);
 router.post('/ai/write', aiController.write);

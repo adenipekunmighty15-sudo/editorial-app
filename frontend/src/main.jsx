@@ -1,4 +1,4 @@
-import { Component, createContext, StrictMode, useContext, useEffect, useRef, useState } from 'react'
+import { Component, createContext, StrictMode, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import {
   Bookmark,
@@ -393,6 +393,11 @@ function App() {
       <div className="loading-spinner" />
     </div>
   )
+
+  const refreshBooks = async () => {
+    const { data, error } = await supabase.from('books').select('*').order('created_at', { ascending: false })
+    if (!error) setBooks(data || [])
+  }
 
   const refreshStories = async () => {
     const { data, error } = await supabase.from('stories').select('*').order('created_at', { ascending: false })
@@ -820,6 +825,7 @@ function App() {
                   onWrite={() => { setEditingStory(null); setWriterOpen(true) }}
                   onEdit={(story) => { setEditingStory(story); setWriterOpen(true) }}
                   onChanged={refreshStories}
+                  onBooksChanged={refreshBooks}
                 />
               )}
               {active === 'Discover' && <PublicationHub books={books} stories={stories} clubs={clubs} author={session.name} onRead={setReadingStory} />}
@@ -2303,6 +2309,32 @@ function PreviewImageRail({ books = defaultBooks, onSelect }) {
   )
 }
 
+function ReaderWithChapters({ book }) {
+  const [state, setState] = useState({ loading: false, chapters: [], error: '' })
+
+  useEffect(() => {
+    if (!book?.id) {
+      setState({ loading: false, chapters: [], error: '' })
+      return undefined
+    }
+    let alive = true
+    setState({ loading: true, chapters: [], error: '' })
+    api.get(`/api/books/${book.id}/chapters`)
+      .then((result) => alive && setState({ loading: false, chapters: result.chapters || [], error: '' }))
+      .catch((error) => alive && setState({ loading: false, chapters: [], error: error.message }))
+    return () => { alive = false }
+  }, [book?.id])
+
+  const withText = useMemo(
+    () => (book ? { ...book, pages: state.chapters.map((chapter) => ({ title: chapter.title, body: chapter.body })) } : book),
+    [book, state.chapters],
+  )
+
+  if (state.loading) return <p className="empty-note">Opening the book…</p>
+  if (state.error) return <p className="empty-note">{state.error}</p>
+  return <BookReader book={withText} />
+}
+
 function BookPreview({ books, book, onSelect }) {
   const selectedBook = book || books[0]
 
@@ -2319,7 +2351,7 @@ function BookPreview({ books, book, onSelect }) {
  
       <PreviewImageRail books={books} onSelect={onSelect} />
  
-      <BookReader book={selectedBook} />
+      <ReaderWithChapters book={selectedBook} />
     </section>
   )
 }
