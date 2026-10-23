@@ -462,7 +462,6 @@ export default function BookReader({ book }) {
               '--br-line-height': `${lineHeight}px`,
             }}
           >
-            <div className="br-underlay" />
             <div
               className={`br-page br-page--measure ${isMobile ? 'br-page--measure-single' : ''}`}
               ref={measureRef}
@@ -532,8 +531,6 @@ export default function BookReader({ book }) {
                 </div>
               )}
             </div>
-            <span className="br-fore-edge" aria-hidden="true" />
-            <span className="br-bottom-edge" aria-hidden="true" />
           </div>
 
           <div className="br-controls" aria-label="Reader controls">

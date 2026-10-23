@@ -171,13 +171,6 @@
   perspective: 2500px;
 }
 
-.br-underlay {
-  position: absolute;
-  inset: -1.2% -1.1%;
-  border-radius: 12px;
-  background: linear-gradient(150deg, #7a3d28, #4c2417 60%, #33170e);
-  box-shadow: 0 28px 45px rgba(0, 0, 0, .5), 0 4px 10px rgba(0, 0, 0, .36);
-}
 
 .br-spread {
   position: relative;
@@ -291,28 +284,7 @@
   to { opacity: 0; }
 }
 
-.br-fore-edge {
-  position: absolute;
-  z-index: 0;
-  top: 1%;
-  right: -.8%;
-  bottom: 1%;
-  width: 9px;
-  border-radius: 0 3px 3px 0;
-  background: repeating-linear-gradient(90deg, #f4ead0 0 2px, #d8c69e 2px 3.5px);
-  box-shadow: 2px 3px 5px rgba(0, 0, 0, .3);
-}
 
-.br-bottom-edge {
-  position: absolute;
-  z-index: 0;
-  right: -.8%;
-  bottom: -1%;
-  left: 1%;
-  height: 8px;
-  border-radius: 0 0 4px 4px;
-  background: repeating-linear-gradient(0deg, #f4ead0 0 2px, #d8c69e 2px 3.5px);
-}
 
 .br-pageface {
   position: absolute;
