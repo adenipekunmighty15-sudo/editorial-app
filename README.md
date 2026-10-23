@@ -43,6 +43,8 @@ Real values go in `.env` files or your host's dashboard — never in the repo.
 
 In Supabase open **SQL Editor -> New query**, paste the contents of `supabase/001_writers_and_persistence.sql` and run it. It adds writer profiles, drafts/published stories, saved books, club membership, likes, notes and subscriptions, and locks tables so the public anon key can only read public content. Writes go through the backend, so `SUPABASE_SERVICE_ROLE_KEY` must be set on the server.
 
+Or from your own computer: put your database URI in `backend/.env` as `SUPABASE_DB_URL` and run `cd backend && npm run migrate`. (Do not use `migrate_schema.js`: it drops the books, clubs and stories tables.)
+
 ## Writers
 
 The **Writers** tab lets any signed-in reader join the writers, write stories, save drafts, publish, edit and delete their own stories, and see their stats. Content creation is on by default; set `ENABLE_WRITES=false` to pause it.
